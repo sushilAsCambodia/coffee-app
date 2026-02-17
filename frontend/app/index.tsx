@@ -151,7 +151,13 @@ export default function LoginScreen() {
             {/* Demo credentials hint */}
             <View style={styles.demoHint}>
               <Ionicons name="information-circle-outline" size={14} color={Colors.mutedForeground} />
-              <Text style={styles.demoText}>Demo: demo@cafeempire.com / demo123</Text>
+              <Text style={styles.demoText}>Customer: demo@cafeempire.com / demo123</Text>
+            </View>
+            <View style={styles.demoHint}>
+              <Text style={styles.demoText}>Admin: admin@cafeempire.com / admin123</Text>
+            </View>
+            <View style={styles.demoHint}>
+              <Text style={styles.demoText}>Driver: driver1@cafeempire.com / driver123</Text>
             </View>
           </View>
         </ScrollView>
