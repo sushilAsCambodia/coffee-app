@@ -24,7 +24,9 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace('/(tabs)/home');
+      if (user.role === 'admin') router.replace('/(admin)/dashboard');
+      else if (user.role === 'driver') router.replace('/(driver)/dashboard');
+      else router.replace('/(tabs)/home');
     }
   }, [user, loading]);
 
@@ -36,8 +38,8 @@ export default function LoginScreen() {
     setIsLoading(true);
     setError('');
     try {
-      await login(email.trim(), password);
-      router.replace('/(tabs)/home');
+      const result = await login(email.trim(), password);
+      // AuthContext sets user, useEffect handles routing
     } catch (e: any) {
       setError(e.message || 'Login failed');
     } finally {
