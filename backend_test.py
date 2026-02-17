@@ -296,6 +296,14 @@ class CoffeeAppAPITester:
         driver_token = self.tokens['driver']
         order_id = self.test_data['order']['order_id']
         
+        # Step 0: Clear any existing active delivery first
+        result = self.make_request('GET', '/driver/active-delivery', None, driver_token)
+        if result['success'] and result['data']:
+            existing_order_id = result['data'].get('order_id')
+            if existing_order_id:
+                self.log_test("Clear existing delivery", True, f"Clearing {existing_order_id}")
+                self.make_request('POST', f'/driver/complete/{existing_order_id}', {}, driver_token)
+        
         # Step 1: Get available orders
         result = self.make_request('GET', '/driver/available-orders', None, driver_token)
         if not result['success']:
