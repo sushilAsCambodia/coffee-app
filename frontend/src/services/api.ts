@@ -91,5 +91,22 @@ export const api = {
 
   // Admin
   getAdminDashboard: () => request('/admin/dashboard'),
-  getAdminOrders: () => request('/admin/orders'),
+  getAdminOrders: (status?: string) => {
+    const qs = status ? `?status=${status}` : '';
+    return request(`/admin/orders${qs}`);
+  },
+  createProduct: (data: any) => request('/admin/products', { method: 'POST', body: JSON.stringify(data) }),
+  updateProduct: (id: string, data: any) => request(`/admin/products/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteProduct: (id: string) => request(`/admin/products/${id}`, { method: 'DELETE' }),
+  getDrivers: () => request('/admin/drivers'),
+  createDriver: (data: any) => request('/admin/drivers', { method: 'POST', body: JSON.stringify(data) }),
+  deleteDriver: (id: string) => request(`/admin/drivers/${id}`, { method: 'DELETE' }),
+
+  // Driver
+  getAvailableOrders: () => request('/driver/available-orders'),
+  acceptOrder: (orderId: string) => request(`/driver/accept/${orderId}`, { method: 'POST' }),
+  getActiveDelivery: () => request('/driver/active-delivery'),
+  updateDriverLocation: (lat: number, lng: number) => request('/driver/location', { method: 'PUT', body: JSON.stringify({ lat, lng }) }),
+  completeDelivery: (orderId: string) => request(`/driver/complete/${orderId}`, { method: 'POST' }),
+  getDriverHistory: () => request('/driver/history'),
 };
