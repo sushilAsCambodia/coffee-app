@@ -166,11 +166,14 @@ backend:
     file: "server.py"
     stuck_count: 0
     priority: "high"
-    needs_retesting: true
+    needs_retesting: false
     status_history:
       - working: true
         agent: "main"
         comment: "Tracking endpoint returns order status, driver info, coordinates"
+      - working: true
+        agent: "testing"
+        comment: "✅ TESTED: Tracking API fully functional. Returns order_id, status, steps array, driver info (when assigned), shop/delivery coordinates. Driver info includes name, phone, vehicle, lat/lng. Status transitions work correctly through confirmed->preparing->ready->out_for_delivery->delivered flow."
 
   - task: "Driver APIs"
     implemented: true
