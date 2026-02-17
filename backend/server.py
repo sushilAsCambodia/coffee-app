@@ -389,9 +389,9 @@ async def confirm_payment(payment_id: str, request: Request):
     return {"status": "completed", "order_id": payment["order_id"], "message": "Payment confirmed!"}
 
 # ============ TRACKING ============
+# Public endpoint - order_id acts as auth token (like Grab/Foodpanda tracking links)
 @api_router.get("/tracking/{order_id}")
-async def get_tracking(order_id: str, request: Request):
-    user = await get_current_user(request)
+async def get_tracking(order_id: str):
     order = await db.orders.find_one({"order_id": order_id}, {"_id": 0})
     if not order: raise HTTPException(status_code=404, detail="Order not found")
     status = order.get("status", "confirmed")
