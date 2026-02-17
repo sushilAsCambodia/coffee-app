@@ -103,38 +103,38 @@ export default function ProductDetailScreen() {
   }
 
   const totalPrice = calculatePrice();
+  const imageUri = PRODUCT_IMAGES[product.image] || PRODUCT_IMAGES.latte;
 
   return (
-    <View style={styles.container}>
-      {/* Hero Image */}
-      <Image source={{ uri: PRODUCT_IMAGES[product.image] || PRODUCT_IMAGES.latte }} style={styles.heroImage} />
-      
-      {/* Back Button */}
-      <SafeAreaView style={styles.topBar}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
+      <View style={styles.headerBar}>
         <TouchableOpacity testID="product-back-btn" style={styles.backBtn} onPress={() => router.back()}>
           <Ionicons name="arrow-back" size={22} color={Colors.foreground} />
         </TouchableOpacity>
-      </SafeAreaView>
+        <Text style={styles.headerTitle} numberOfLines={1}>{product.name}</Text>
+        <View style={{ width: 40 }} />
+      </View>
 
-      {/* Content Sheet */}
-      <ScrollView style={styles.sheet} contentContainerStyle={styles.sheetContent} showsVerticalScrollIndicator={false}>
-        <View style={styles.dragHandle} />
-        
-        <View style={styles.titleRow}>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.productName}>{product.name}</Text>
-            <View style={styles.ratingRow}>
-              <Ionicons name="star" size={16} color={Colors.star} />
-              <Text style={styles.ratingText}>{product.rating}</Text>
-              <Text style={styles.reviewCount}>({product.reviews} reviews)</Text>
-              <View style={styles.dot} />
-              <Ionicons name="time-outline" size={14} color={Colors.mutedForeground} />
-              <Text style={styles.prepTime}>{product.prep_time}</Text>
-            </View>
-          </View>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
+        {/* Product Image */}
+        <View style={styles.imageContainer}>
+          <Image source={{ uri: imageUri }} style={styles.productImage} resizeMode="cover" />
         </View>
 
-        <Text style={styles.description}>{product.description}</Text>
+        {/* Product Info Card */}
+        <View style={styles.infoCard}>
+          <Text style={styles.productName}>{product.name}</Text>
+          <View style={styles.ratingRow}>
+            <Ionicons name="star" size={16} color={Colors.star} />
+            <Text style={styles.ratingText}>{product.rating}</Text>
+            <Text style={styles.reviewCount}>({product.reviews} reviews)</Text>
+            <View style={styles.dot} />
+            <Ionicons name="time-outline" size={14} color={Colors.mutedForeground} />
+            <Text style={styles.prepTime}>{product.prep_time}</Text>
+          </View>
+          <Text style={styles.description}>{product.description}</Text>
+        </View>
 
         {/* Size Selection */}
         {product.sizes?.length > 0 && (
@@ -201,7 +201,7 @@ export default function ProductDetailScreen() {
           </View>
         )}
 
-        <View style={{ height: 120 }} />
+        <View style={{ height: 100 }} />
       </ScrollView>
 
       {/* Bottom Bar */}
@@ -221,39 +221,41 @@ export default function ProductDetailScreen() {
           ) : (
             <>
               <Ionicons name="cart-outline" size={20} color={Colors.primaryForeground} />
-              <Text style={styles.addToCartText}>Add to Cart · ${totalPrice.toFixed(2)}</Text>
+              <Text style={styles.addToCartText}>Add · ${totalPrice.toFixed(2)}</Text>
             </>
           )}
         </TouchableOpacity>
       </View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: Colors.background },
-  heroImage: { width, height: width * 0.7, backgroundColor: Colors.muted },
-  topBar: { position: 'absolute', top: 0, left: 0, right: 0, zIndex: 10 },
+  headerBar: {
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingVertical: 10,
+    backgroundColor: Colors.background,
+  },
   backBtn: {
-    width: 40, height: 40, borderRadius: 20, backgroundColor: 'rgba(255,255,255,0.9)',
-    alignItems: 'center', justifyContent: 'center', marginLeft: 16, marginTop: 8,
-    ...Shadows.small,
+    width: 40, height: 40, borderRadius: 20, backgroundColor: Colors.muted,
+    alignItems: 'center', justifyContent: 'center',
   },
-  sheet: {
-    flex: 1, backgroundColor: Colors.card, marginTop: -40,
-    borderTopLeftRadius: 30, borderTopRightRadius: 30,
+  headerTitle: { flex: 1, fontSize: Typography.lg, fontWeight: '600', color: Colors.foreground, textAlign: 'center' },
+  scrollContent: { paddingBottom: 20 },
+  imageContainer: {
+    marginHorizontal: 20, marginTop: 8, borderRadius: BorderRadius.xl,
+    overflow: 'hidden', backgroundColor: Colors.muted,
   },
-  sheetContent: { padding: 24 },
-  dragHandle: { width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.muted, alignSelf: 'center', marginBottom: 20 },
-  titleRow: { flexDirection: 'row', alignItems: 'flex-start' },
+  productImage: { width: '100%', height: 250 },
+  infoCard: { paddingHorizontal: 20, paddingTop: 20 },
   productName: { fontSize: Typography['2xl'], fontWeight: '700', color: Colors.foreground },
   ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 8 },
   ratingText: { fontSize: Typography.sm, fontWeight: '600', color: Colors.foreground },
   reviewCount: { fontSize: Typography.xs, color: Colors.mutedForeground },
   dot: { width: 3, height: 3, borderRadius: 1.5, backgroundColor: Colors.mutedForeground, marginHorizontal: 4 },
   prepTime: { fontSize: Typography.xs, color: Colors.mutedForeground },
-  description: { fontSize: Typography.base, color: Colors.mutedForeground, lineHeight: 24, marginTop: 16 },
-  optionSection: { marginTop: 24 },
+  description: { fontSize: Typography.base, color: Colors.mutedForeground, lineHeight: 24, marginTop: 12 },
+  optionSection: { marginTop: 24, paddingHorizontal: 20 },
   optionTitle: { fontSize: Typography.lg, fontWeight: '600', color: Colors.foreground, marginBottom: 12 },
   optionRow: { flexDirection: 'row', gap: 10, flexWrap: 'wrap' },
   sizeChip: {
@@ -286,17 +288,16 @@ const styles = StyleSheet.create({
   addonName: { flex: 1, fontSize: Typography.base, color: Colors.foreground },
   addonPrice: { fontSize: Typography.sm, fontWeight: '600', color: Colors.accent },
   bottomBar: {
-    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 16,
+    flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingVertical: 14,
     backgroundColor: Colors.card, borderTopWidth: 1, borderTopColor: Colors.border,
-    gap: 14, paddingBottom: 32,
+    gap: 14, paddingBottom: 24,
   },
   quantityControl: { flexDirection: 'row', alignItems: 'center', gap: 12, backgroundColor: Colors.inputBackground, borderRadius: BorderRadius.full, padding: 4 },
-  qtyBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.card, alignItems: 'center', justifyContent: 'center', ...Shadows.small },
+  qtyBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: Colors.card, alignItems: 'center', justifyContent: 'center' },
   qtyText: { fontSize: Typography.lg, fontWeight: '700', color: Colors.foreground, minWidth: 24, textAlign: 'center' },
   addToCartBtn: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8,
     backgroundColor: Colors.primary, borderRadius: BorderRadius.full, paddingVertical: 16,
-    ...Shadows.medium,
   },
   addToCartText: { color: Colors.primaryForeground, fontSize: Typography.base, fontWeight: '600' },
 });
