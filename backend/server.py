@@ -502,9 +502,21 @@ async def get_drivers(request: Request):
     user = await get_current_user(request)
     if user.get("role") != "admin": raise HTTPException(status_code=403, detail="Admin only")
     drivers = await db.users.find({"role": "driver"}, {"_id": 0, "password_hash": 0}).to_list(100)
+    # Batch fetch driver stats using aggregation to avoid N+1 queries
+    driver_ids = [d["user_id"] for d in drivers]
+    active_pipeline = [
+        {"$match": {"driver_id": {"$in": driver_ids}, "status": "out_for_delivery"}},
+        {"$group": {"_id": "$driver_id", "count": {"$sum": 1}}}
+    ]
+    total_pipeline = [
+        {"$match": {"driver_id": {"$in": driver_ids}, "status": "delivered"}},
+        {"$group": {"_id": "$driver_id", "count": {"$sum": 1}}}
+    ]
+    active_counts = {doc["_id"]: doc["count"] for doc in await db.orders.aggregate(active_pipeline).to_list(100)}
+    total_counts = {doc["_id"]: doc["count"] for doc in await db.orders.aggregate(total_pipeline).to_list(100)}
     for d in drivers:
-        d["active_orders"] = await db.orders.count_documents({"driver_id": d["user_id"], "status": "out_for_delivery"})
-        d["total_deliveries"] = await db.orders.count_documents({"driver_id": d["user_id"], "status": "delivered"})
+        d["active_orders"] = active_counts.get(d["user_id"], 0)
+        d["total_deliveries"] = total_counts.get(d["user_id"], 0)
     return drivers
 
 @api_router.post("/admin/drivers")
