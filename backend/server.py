@@ -306,9 +306,13 @@ async def create_order(data: OrderCreate, request: Request):
     user = await get_current_user(request)
     cart_items = await db.cart.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(100)
     if not cart_items: raise HTTPException(status_code=400, detail="Cart is empty")
+    # Batch fetch products to avoid N+1 queries
+    product_ids = [ci["product_id"] for ci in cart_items]
+    products = await db.products.find({"product_id": {"$in": product_ids}}, {"_id": 0}).to_list(100)
+    product_map = {p["product_id"]: p for p in products}
     order_items = []
     for ci in cart_items:
-        product = await db.products.find_one({"product_id": ci["product_id"]}, {"_id": 0})
+        product = product_map.get(ci["product_id"])
         order_items.append({
             "product_id": ci["product_id"], "product_name": product["name"] if product else "Unknown",
             "product_image": product.get("image", "") if product else "",
