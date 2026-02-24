@@ -245,9 +245,13 @@ async def get_product(product_id: str):
 async def get_cart(request: Request):
     user = await get_current_user(request)
     items = await db.cart.find({"user_id": user["user_id"]}, {"_id": 0}).to_list(100)
+    # Batch fetch products to avoid N+1 queries
+    product_ids = [item["product_id"] for item in items]
+    products = await db.products.find({"product_id": {"$in": product_ids}}, {"_id": 0}).to_list(100)
+    product_map = {p["product_id"]: p for p in products}
     enriched = []
     for item in items:
-        product = await db.products.find_one({"product_id": item["product_id"]}, {"_id": 0})
+        product = product_map.get(item["product_id"])
         if product: item["product"] = product
         enriched.append(item)
     total = sum(i.get("total_price", 0) for i in enriched)
