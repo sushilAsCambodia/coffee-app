@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, ScrollView, TextInput,
   ActivityIndicator, Alert, KeyboardAvoidingView, Platform,
@@ -6,84 +6,73 @@ import {
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useCart } from '../src/context/CartContext';
 import { api } from '../src/services/api';
 import { Colors, Typography, BorderRadius, Shadows } from '../src/constants/theme';
 
+// Server auto-processes cash and static_qr payments immediately on order creation
+const PAYMENT_METHODS = [
+  { id: 'cash',       name: 'Cash',        icon: 'cash-outline'     },
+  { id: 'static_qr',  name: 'KHQR / ABA',  icon: 'qr-code-outline'  },
+] as const;
+
+type PaymentMethodId = typeof PAYMENT_METHODS[number]['id'];
+
 export default function CheckoutScreen() {
   const router = useRouter();
-  const [cart, setCart] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [processing, setProcessing] = useState(false);
-  const [address, setAddress] = useState('#123, Street 240, Phnom Penh, Cambodia');
+  const { items, total, clearCart } = useCart();
+
   const [note, setNote] = useState('');
-  const [paymentMethod, setPaymentMethod] = useState('qr');
-  const [step, setStep] = useState<'details' | 'payment' | 'success'>('details');
-  const [orderId, setOrderId] = useState('');
-
-  useEffect(() => {
-    loadCart();
-  }, []);
-
-  const loadCart = async () => {
-    try {
-      const data = await api.getCart();
-      setCart(data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const [customerName, setCustomerName] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethodId>('cash');
+  const [processing, setProcessing] = useState(false);
+  const [step, setStep] = useState<'details' | 'processing' | 'success'>('details');
+  const [orderNumber, setOrderNumber] = useState('');
 
   const handlePlaceOrder = async () => {
-    if (!address.trim()) {
-      Alert.alert('Error', 'Please enter a delivery address');
+    if (items.length === 0) {
+      Alert.alert('Empty Cart', 'Please add items before ordering');
       return;
     }
     setProcessing(true);
+    setStep('processing');
     try {
       const order = await api.createOrder({
-        delivery_address: address.trim(),
-        payment_method: 'aba_payway',
-        note: note.trim(),
+        customer_name: customerName.trim() || undefined,
+        order_notes: note.trim() || undefined,
+        service_mode: 'takeaway',
+        payment_method: paymentMethod,
+        items: items.map(item => ({
+          menu_id: item.menu_id,
+          name: item.name,
+          quantity: item.quantity,
+          unit_price: item.unit_price,
+          variants: item.variants.map(v => ({
+            variant_id: v.variant_id,
+            variant_name: v.variant_name,
+            option_id: v.option_id,
+            option_name: v.option_name,
+          })),
+          addons: item.addons.map(a => ({
+            id: a.id,
+            name: a.name,
+            price: a.price,
+          })),
+        })),
       });
-      setOrderId(order.order_id);
-      setStep('payment');
-      
-      // Initiate mock payment
-      const payment = await api.initiatePayment({ order_id: order.order_id, method: paymentMethod });
-      
-      // Simulate payment processing
-      setTimeout(async () => {
-        try {
-          await api.confirmPayment(payment.payment_id);
-          setStep('success');
-        } catch (e) {
-          Alert.alert('Payment Issue', 'Payment could not be confirmed. Please try again.');
-          setStep('details');
-        }
-      }, 2500);
+
+      setOrderNumber(order.order_number);
+      clearCart();
+      setStep('success');
     } catch (e: any) {
-      Alert.alert('Error', e.message || 'Failed to place order');
+      Alert.alert('Error', e.message || 'Failed to place order. Please try again.');
+      setStep('details');
     } finally {
       setProcessing(false);
     }
   };
 
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 100 }} />
-      </SafeAreaView>
-    );
-  }
-
-  const items = cart?.items || [];
-  const subtotal = cart?.total || 0;
-  const deliveryFee = 1.50;
-  const total = subtotal + deliveryFee;
-
-  // Success Screen
+  // ── Success ──
   if (step === 'success') {
     return (
       <SafeAreaView style={styles.container}>
@@ -92,20 +81,22 @@ export default function CheckoutScreen() {
             <Ionicons name="checkmark-circle" size={72} color={Colors.success} />
           </View>
           <Text style={styles.successTitle}>Order Placed!</Text>
-          <Text style={styles.successSubtitle}>Your coffee is being prepared with love</Text>
-          <Text style={styles.successOrderId}>{orderId}</Text>
-          
+          <Text style={styles.successSubtitle}>Your coffee is being prepared</Text>
+          <Text style={styles.successOrderId}>{orderNumber}</Text>
           <TouchableOpacity
-            testID="track-order-btn"
+            testID="view-orders-btn"
             style={styles.trackBtn}
-            onPress={() => router.replace(`/tracking/${orderId}`)}
+            onPress={() => router.replace('/(tabs)/orders')}
             activeOpacity={0.85}
           >
-            <Ionicons name="location-outline" size={20} color={Colors.primaryForeground} />
-            <Text style={styles.trackBtnText}>Track My Order</Text>
+            <Ionicons name="receipt-outline" size={20} color={Colors.primaryForeground} />
+            <Text style={styles.trackBtnText}>View My Orders</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity testID="back-home-btn" style={styles.homeBtn} onPress={() => router.replace('/(tabs)/home')}>
+          <TouchableOpacity
+            testID="back-home-btn"
+            style={styles.homeBtn}
+            onPress={() => router.replace('/(tabs)/home')}
+          >
             <Text style={styles.homeBtnText}>Back to Menu</Text>
           </TouchableOpacity>
         </View>
@@ -113,32 +104,24 @@ export default function CheckoutScreen() {
     );
   }
 
-  // Payment Processing Screen
-  if (step === 'payment') {
+  // ── Processing ──
+  if (step === 'processing') {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.paymentContainer}>
-          <View style={styles.abaLogo}>
-            <Text style={styles.abaText}>ABA</Text>
-            <Text style={styles.payWayText}>PayWay</Text>
-          </View>
-          <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 24 }} />
+          <ActivityIndicator size="large" color={Colors.primary} />
           <Text style={styles.paymentProcessing}>Processing Payment...</Text>
           <Text style={styles.paymentAmount}>${total.toFixed(2)}</Text>
-          <View style={styles.qrPlaceholder}>
-            <Ionicons name="qr-code-outline" size={100} color={Colors.primary} />
-            <Text style={styles.qrText}>Scan to Pay</Text>
-          </View>
-          <Text style={styles.mockText}>Mock ABA PayWay - Auto confirming...</Text>
+          <Text style={styles.orderRef}>{orderNumber}</Text>
         </View>
       </SafeAreaView>
     );
   }
 
+  // ── Details ──
   return (
     <SafeAreaView style={styles.container}>
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={{ flex: 1 }}>
-        {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity testID="checkout-back-btn" onPress={() => router.back()} style={styles.backBtn}>
             <Ionicons name="arrow-back" size={24} color={Colors.foreground} />
@@ -148,20 +131,19 @@ export default function CheckoutScreen() {
         </View>
 
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.content}>
-          {/* Delivery Address */}
+          {/* Customer name (optional) */}
           <View style={styles.section}>
             <View style={styles.sectionHeader}>
-              <Ionicons name="location" size={20} color={Colors.primary} />
-              <Text style={styles.sectionTitle}>Delivery Address</Text>
+              <Ionicons name="person-outline" size={20} color={Colors.primary} />
+              <Text style={styles.sectionTitle}>Your Name (optional)</Text>
             </View>
             <TextInput
-              testID="address-input"
-              style={styles.addressInput}
-              value={address}
-              onChangeText={setAddress}
-              placeholder="Enter your delivery address"
+              testID="name-input"
+              style={styles.textInput}
+              value={customerName}
+              onChangeText={setCustomerName}
+              placeholder="Enter your name"
               placeholderTextColor={Colors.mutedForeground}
-              multiline
             />
           </View>
 
@@ -171,16 +153,25 @@ export default function CheckoutScreen() {
               <Ionicons name="receipt" size={20} color={Colors.primary} />
               <Text style={styles.sectionTitle}>Order Summary</Text>
             </View>
-            {items.map((item: any) => (
+            {items.map(item => (
               <View key={item.cart_id} style={styles.summaryItem}>
                 <View style={styles.summaryItemLeft}>
                   <Text style={styles.summaryQty}>{item.quantity}x</Text>
-                  <View>
-                    <Text style={styles.summaryName}>{item.product?.name || 'Item'}</Text>
-                    <Text style={styles.summaryDetails}>{item.size} · {item.sugar_level}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.summaryName}>{item.name}</Text>
+                    {item.variants?.length > 0 && (
+                      <Text style={styles.summaryDetails}>
+                        {item.variants.map(v => v.option_name).join(' · ')}
+                      </Text>
+                    )}
+                    {item.addons?.length > 0 && (
+                      <Text style={styles.summaryDetails}>
+                        + {item.addons.map(a => a.name).join(', ')}
+                      </Text>
+                    )}
                   </View>
                 </View>
-                <Text style={styles.summaryPrice}>${item.total_price?.toFixed(2)}</Text>
+                <Text style={styles.summaryPrice}>${item.total_price.toFixed(2)}</Text>
               </View>
             ))}
           </View>
@@ -191,30 +182,22 @@ export default function CheckoutScreen() {
               <Ionicons name="card" size={20} color={Colors.primary} />
               <Text style={styles.sectionTitle}>Payment Method</Text>
             </View>
-            <TouchableOpacity
-              testID="payment-qr"
-              style={[styles.paymentOption, paymentMethod === 'qr' && styles.paymentOptionActive]}
-              onPress={() => setPaymentMethod('qr')}
-            >
-              <Ionicons name="qr-code-outline" size={24} color={paymentMethod === 'qr' ? Colors.primary : Colors.mutedForeground} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.paymentLabel}>ABA QR Payment</Text>
-                <Text style={styles.paymentDesc}>Scan QR code to pay</Text>
-              </View>
-              <View style={[styles.radio, paymentMethod === 'qr' && styles.radioActive]} />
-            </TouchableOpacity>
-            <TouchableOpacity
-              testID="payment-card"
-              style={[styles.paymentOption, paymentMethod === 'card' && styles.paymentOptionActive]}
-              onPress={() => setPaymentMethod('card')}
-            >
-              <Ionicons name="card-outline" size={24} color={paymentMethod === 'card' ? Colors.primary : Colors.mutedForeground} />
-              <View style={{ flex: 1 }}>
-                <Text style={styles.paymentLabel}>Card Payment</Text>
-                <Text style={styles.paymentDesc}>Visa, Mastercard, UnionPay</Text>
-              </View>
-              <View style={[styles.radio, paymentMethod === 'card' && styles.radioActive]} />
-            </TouchableOpacity>
+            {PAYMENT_METHODS.map(method => (
+              <TouchableOpacity
+                testID={`payment-${method.id}`}
+                key={method.id}
+                style={[styles.paymentOption, paymentMethod === method.id && styles.paymentOptionActive]}
+                onPress={() => setPaymentMethod(method.id)}
+              >
+                <Ionicons
+                  name={method.icon as any}
+                  size={24}
+                  color={paymentMethod === method.id ? Colors.primary : Colors.mutedForeground}
+                />
+                <Text style={styles.paymentLabel}>{method.name}</Text>
+                <View style={[styles.radio, paymentMethod === method.id && styles.radioActive]} />
+              </TouchableOpacity>
+            ))}
           </View>
 
           {/* Note */}
@@ -225,7 +208,7 @@ export default function CheckoutScreen() {
             </View>
             <TextInput
               testID="note-input"
-              style={styles.noteInput}
+              style={[styles.textInput, { minHeight: 60, textAlignVertical: 'top' }]}
               value={note}
               onChangeText={setNote}
               placeholder="Any special instructions..."
@@ -235,25 +218,17 @@ export default function CheckoutScreen() {
           </View>
         </ScrollView>
 
-        {/* Bottom */}
+        {/* Bottom bar */}
         <View style={styles.bottomBar}>
           <View style={styles.totalRow}>
-            <View>
-              <Text style={styles.totalLabel}>Subtotal</Text>
-              <Text style={styles.totalLabel}>Delivery</Text>
-              <Text style={styles.grandTotalLabel}>Total</Text>
-            </View>
-            <View style={{ alignItems: 'flex-end' }}>
-              <Text style={styles.totalValue}>${subtotal.toFixed(2)}</Text>
-              <Text style={styles.totalValue}>${deliveryFee.toFixed(2)}</Text>
-              <Text style={styles.grandTotalValue}>${total.toFixed(2)}</Text>
-            </View>
+            <Text style={styles.grandTotalLabel}>Total</Text>
+            <Text style={styles.grandTotalValue}>${total.toFixed(2)}</Text>
           </View>
           <TouchableOpacity
             testID="place-order-btn"
-            style={styles.placeOrderBtn}
+            style={[styles.placeOrderBtn, items.length === 0 && styles.placeOrderBtnDisabled]}
             onPress={handlePlaceOrder}
-            disabled={processing}
+            disabled={processing || items.length === 0}
             activeOpacity={0.85}
           >
             {processing ? (
@@ -277,16 +252,15 @@ const styles = StyleSheet.create({
   section: { marginBottom: 24 },
   sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 },
   sectionTitle: { fontSize: Typography.lg, fontWeight: '600', color: Colors.foreground },
-  addressInput: {
+  textInput: {
     backgroundColor: Colors.inputBackground, borderRadius: BorderRadius.md, padding: 16,
     fontSize: Typography.base, color: Colors.foreground, borderWidth: 1, borderColor: Colors.border,
-    minHeight: 60, textAlignVertical: 'top',
   },
-  summaryItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 10 },
-  summaryItemLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  summaryItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingVertical: 10 },
+  summaryItemLeft: { flexDirection: 'row', alignItems: 'flex-start', gap: 12, flex: 1 },
   summaryQty: { fontSize: Typography.sm, fontWeight: '700', color: Colors.primary, width: 28 },
   summaryName: { fontSize: Typography.base, fontWeight: '500', color: Colors.foreground },
-  summaryDetails: { fontSize: Typography.xs, color: Colors.mutedForeground },
+  summaryDetails: { fontSize: Typography.xs, color: Colors.mutedForeground, marginTop: 2 },
   summaryPrice: { fontSize: Typography.base, fontWeight: '600', color: Colors.foreground },
   paymentOption: {
     flexDirection: 'row', alignItems: 'center', gap: 14, padding: 16,
@@ -294,51 +268,41 @@ const styles = StyleSheet.create({
     borderWidth: 1.5, borderColor: 'transparent',
   },
   paymentOptionActive: { borderColor: Colors.primary, backgroundColor: Colors.secondary },
-  paymentLabel: { fontSize: Typography.base, fontWeight: '600', color: Colors.foreground },
-  paymentDesc: { fontSize: Typography.xs, color: Colors.mutedForeground, marginTop: 2 },
+  paymentLabel: { flex: 1, fontSize: Typography.base, fontWeight: '600', color: Colors.foreground },
   radio: { width: 22, height: 22, borderRadius: 11, borderWidth: 2, borderColor: Colors.border },
   radioActive: { borderColor: Colors.primary, backgroundColor: Colors.primary },
-  noteInput: {
-    backgroundColor: Colors.inputBackground, borderRadius: BorderRadius.md, padding: 16,
-    fontSize: Typography.base, color: Colors.foreground, borderWidth: 1, borderColor: Colors.border,
-    minHeight: 60, textAlignVertical: 'top',
-  },
   bottomBar: {
     backgroundColor: Colors.card, padding: 20, paddingBottom: 32,
     borderTopWidth: 1, borderTopColor: Colors.border, ...Shadows.large,
   },
   totalRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  totalLabel: { fontSize: Typography.sm, color: Colors.mutedForeground, marginBottom: 4 },
-  totalValue: { fontSize: Typography.sm, color: Colors.foreground, marginBottom: 4, fontWeight: '500' },
-  grandTotalLabel: { fontSize: Typography.lg, fontWeight: '700', color: Colors.foreground, marginTop: 4 },
-  grandTotalValue: { fontSize: Typography.lg, fontWeight: '700', color: Colors.primary, marginTop: 4 },
+  grandTotalLabel: { fontSize: Typography.lg, fontWeight: '700', color: Colors.foreground },
+  grandTotalValue: { fontSize: Typography.lg, fontWeight: '700', color: Colors.primary },
   placeOrderBtn: {
     backgroundColor: Colors.primary, borderRadius: BorderRadius.full, paddingVertical: 16,
     alignItems: 'center', justifyContent: 'center', ...Shadows.medium,
   },
+  placeOrderBtnDisabled: { opacity: 0.5 },
   placeOrderText: { color: Colors.primaryForeground, fontSize: Typography.base, fontWeight: '600' },
-  // Success styles
+  // Success
   successContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
   successIconBg: { marginBottom: 24 },
   successTitle: { fontSize: Typography['3xl'], fontWeight: '700', color: Colors.foreground },
   successSubtitle: { fontSize: Typography.base, color: Colors.mutedForeground, marginTop: 8, textAlign: 'center' },
-  successOrderId: { fontSize: Typography.sm, color: Colors.primary, fontWeight: '600', marginTop: 12, backgroundColor: Colors.secondary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: BorderRadius.full },
+  successOrderId: {
+    fontSize: Typography.sm, color: Colors.primary, fontWeight: '600', marginTop: 12,
+    backgroundColor: Colors.secondary, paddingHorizontal: 16, paddingVertical: 8, borderRadius: BorderRadius.full,
+  },
   trackBtn: {
     flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.full, paddingVertical: 16, paddingHorizontal: 32, marginTop: 32,
-    ...Shadows.medium,
+    borderRadius: BorderRadius.full, paddingVertical: 16, paddingHorizontal: 32, marginTop: 32, ...Shadows.medium,
   },
   trackBtnText: { color: Colors.primaryForeground, fontSize: Typography.base, fontWeight: '600' },
   homeBtn: { marginTop: 16, paddingVertical: 12, paddingHorizontal: 24 },
   homeBtnText: { color: Colors.primary, fontSize: Typography.base, fontWeight: '500' },
-  // Payment processing
-  paymentContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32 },
-  abaLogo: { flexDirection: 'row', alignItems: 'baseline', gap: 4 },
-  abaText: { fontSize: 36, fontWeight: '900', color: '#003366' },
-  payWayText: { fontSize: 18, fontWeight: '600', color: Colors.accent },
-  paymentProcessing: { fontSize: Typography.lg, color: Colors.foreground, fontWeight: '600', marginTop: 20 },
-  paymentAmount: { fontSize: Typography['3xl'], fontWeight: '700', color: Colors.primary, marginTop: 8 },
-  qrPlaceholder: { alignItems: 'center', marginTop: 32, padding: 32, backgroundColor: Colors.card, borderRadius: BorderRadius.xl, ...Shadows.medium },
-  qrText: { fontSize: Typography.sm, color: Colors.mutedForeground, marginTop: 12 },
-  mockText: { fontSize: Typography.xs, color: Colors.mutedForeground, marginTop: 24, fontStyle: 'italic' },
+  // Processing
+  paymentContainer: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 32, gap: 16 },
+  paymentProcessing: { fontSize: Typography.lg, color: Colors.foreground, fontWeight: '600' },
+  paymentAmount: { fontSize: Typography['3xl'], fontWeight: '700', color: Colors.primary },
+  orderRef: { fontSize: Typography.sm, color: Colors.mutedForeground },
 });

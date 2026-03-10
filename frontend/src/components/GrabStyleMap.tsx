@@ -416,7 +416,12 @@ document.addEventListener('message', function(e) { try { var d = JSON.parse(e.da
         scrollEnabled={false}
         bounces={false}
         javaScriptEnabled={true}
+        domStorageEnabled={true}
         originWhitelist={['*']}
+        mixedContentMode="always"
+        allowsInlineMediaPlayback={true}
+        allowFileAccessFromFileURLs={true}
+        allowUniversalAccessFromFileURLs={true}
         onMessage={(event: any) => {
           try {
             const data = JSON.parse(event.nativeEvent.data);

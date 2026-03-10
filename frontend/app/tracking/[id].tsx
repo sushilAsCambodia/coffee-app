@@ -1,307 +1,285 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions, Animated,
-  Platform, ActivityIndicator, ScrollView, Linking, Image,
+  ActivityIndicator, ScrollView,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { api } from '../../src/services/api';
+import { api, Order, OrderStatus } from '../../src/services/api';
 import { Colors, Typography, BorderRadius, Shadows } from '../../src/constants/theme';
-import GrabStyleMap from '../../src/components/GrabStyleMap';
 
-const { width, height } = Dimensions.get('window');
-const SHEET_MIN_HEIGHT = 260;
-const SHEET_MAX_HEIGHT = height * 0.55;
+const { height } = Dimensions.get('window');
+const SHEET_MIN = 300;
+const SHEET_MAX = height * 0.72;
 
-interface TrackingData {
-  order_id: string;
-  status: string;
-  steps: { key: string; label: string; completed: boolean }[];
-  driver?: {
-    name: string;
-    phone: string;
-    vehicle: string;
-    plate: string;
-    lat: number;
-    lng: number;
-    picture?: string;
-  };
-  estimated_delivery?: string;
-  delivery_address: string;
-  delivery_lat: number;
-  delivery_lng: number;
-  shop_lat: number;
-  shop_lng: number;
-  total: number;
-  items: any[];
-}
+const STEPS: { key: OrderStatus; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
+  { key: 'pending',   label: 'Order Received',   icon: 'receipt-outline'              },
+  { key: 'preparing', label: 'Being Prepared',   icon: 'cafe-outline'                 },
+  { key: 'ready',     label: 'Ready for Pickup', icon: 'bag-check-outline'            },
+  { key: 'completed', label: 'Completed',        icon: 'checkmark-done-circle-outline'},
+];
 
-const STATUS_CONFIG: Record<string, { label: string; color: string; icon: keyof typeof Ionicons.glyphMap; bgColor: string }> = {
-  pending_payment: { label: 'Awaiting Payment', color: '#F59E0B', icon: 'card-outline', bgColor: '#FEF3C7' },
-  confirmed: { label: 'Order Confirmed', color: '#6f4e37', icon: 'checkmark-circle', bgColor: '#F5F0EB' },
-  preparing: { label: 'Being Prepared', color: '#8B5CF6', icon: 'cafe', bgColor: '#EDE9FE' },
-  ready: { label: 'Ready for Pickup', color: '#10B981', icon: 'bag-check', bgColor: '#D1FAE5' },
-  out_for_delivery: { label: 'On the Way!', color: '#00B14F', icon: 'bicycle', bgColor: '#D1FAE5' },
-  delivered: { label: 'Delivered!', color: '#059669', icon: 'checkmark-done-circle', bgColor: '#D1FAE5' },
+const STATUS_COLOR: Record<string, string> = {
+  pending:   '#F59E0B',
+  preparing: '#8B5CF6',
+  ready:     '#3B82F6',
+  completed: '#10B981',
+  cancelled: '#EF4444',
 };
 
-export default function GrabStyleTracking() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const { id } = useLocalSearchParams<{ id: string }>();
-  const [tracking, setTracking] = useState<TrackingData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [mapReady, setMapReady] = useState(false);
-  const [expanded, setExpanded] = useState(false);
-  
-  const sheetHeight = useRef(new Animated.Value(SHEET_MIN_HEIGHT)).current;
-  const pulseAnim = useRef(new Animated.Value(1)).current;
+const STATUS_LABEL: Record<string, string> = {
+  pending:   'Order Received',
+  preparing: 'Being Prepared',
+  ready:     'Ready for Pickup',
+  completed: 'Completed',
+  cancelled: 'Cancelled',
+};
 
-  // Pulse animation for status
+const STATUS_ICON: Record<string, keyof typeof Ionicons.glyphMap> = {
+  pending:   'time-outline',
+  preparing: 'cafe',
+  ready:     'bag-check',
+  completed: 'checkmark-done-circle',
+  cancelled: 'close-circle',
+};
+
+function getStepIndex(status: string): number {
+  return STEPS.findIndex(s => s.key === status);
+}
+
+export default function OrderTrackingScreen() {
+  const router    = useRouter();
+  const insets    = useSafeAreaInsets();
+  const { id }    = useLocalSearchParams<{ id: string }>();
+
+  const [order,   setOrder]   = useState<Order | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [expanded, setExpanded] = useState(false);
+
+  const sheetHeight = useRef(new Animated.Value(SHEET_MIN)).current;
+  const pulseAnim   = useRef(new Animated.Value(1)).current;
+  const fadeAnim    = useRef(new Animated.Value(0)).current;
+
   useEffect(() => {
     const pulse = Animated.loop(
       Animated.sequence([
-        Animated.timing(pulseAnim, { toValue: 1.15, duration: 800, useNativeDriver: true }),
-        Animated.timing(pulseAnim, { toValue: 1, duration: 800, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1.18, duration: 900, useNativeDriver: true }),
+        Animated.timing(pulseAnim, { toValue: 1,    duration: 900, useNativeDriver: true }),
       ])
     );
     pulse.start();
     return () => pulse.stop();
   }, []);
 
-  const loadTracking = useCallback(async () => {
+  useEffect(() => {
+    Animated.timing(fadeAnim, { toValue: 1, duration: 500, useNativeDriver: true }).start();
+  }, []);
+
+  const loadOrder = useCallback(async () => {
+    if (!id) return;
     try {
-      const data = await api.getTracking(id!);
-      setTracking(data);
+      const data = await api.getOrder(parseInt(id, 10));
+      setOrder(data);
     } catch (e) {
-      console.error('Tracking error:', e);
+      console.error('[tracking] error', e);
     } finally {
       setLoading(false);
     }
   }, [id]);
 
   useEffect(() => {
-    loadTracking();
-    // Poll for updates every 5 seconds
-    const interval = setInterval(loadTracking, 5000);
-    return () => clearInterval(interval);
-  }, [loadTracking]);
+    loadOrder();
+    const iv = setInterval(loadOrder, 6000);
+    return () => clearInterval(iv);
+  }, [loadOrder]);
 
   const toggleSheet = () => {
-    const toValue = expanded ? SHEET_MIN_HEIGHT : SHEET_MAX_HEIGHT;
-    Animated.spring(sheetHeight, {
-      toValue,
-      useNativeDriver: false,
-      tension: 65,
-      friction: 10,
-    }).start();
-    setExpanded(!expanded);
+    const toValue = expanded ? SHEET_MIN : SHEET_MAX;
+    Animated.spring(sheetHeight, { toValue, useNativeDriver: false, tension: 60, friction: 10 }).start();
+    setExpanded(e => !e);
   };
 
-  const handleCall = () => {
-    if (tracking?.driver?.phone) {
-      Linking.openURL(`tel:${tracking.driver.phone}`);
-    }
-  };
-
-  if (loading || !tracking) {
+  if (loading) {
     return (
-      <SafeAreaView style={styles.loadingContainer}>
+      <SafeAreaView style={styles.centered}>
         <ActivityIndicator size="large" color={Colors.primary} />
-        <Text style={styles.loadingText}>Loading your order...</Text>
+        <Text style={styles.loadingText}>Loading order...</Text>
       </SafeAreaView>
     );
   }
 
-  const config = STATUS_CONFIG[tracking.status] || STATUS_CONFIG.confirmed;
-  const isOutForDelivery = tracking.status === 'out_for_delivery';
-  const isDelivered = tracking.status === 'delivered';
-  
-  // Calculate ETA
-  const eta = tracking.estimated_delivery ? new Date(tracking.estimated_delivery) : null;
-  const etaMinutes = eta ? Math.max(0, Math.round((eta.getTime() - Date.now()) / 60000)) : null;
-
-  return (
-    <View style={styles.container}>
-      {/* Full Screen Map */}
-      <GrabStyleMap
-        shopLat={tracking.shop_lat}
-        shopLng={tracking.shop_lng}
-        deliveryLat={tracking.delivery_lat}
-        deliveryLng={tracking.delivery_lng}
-        driverLat={tracking.driver?.lat}
-        driverLng={tracking.driver?.lng}
-        status={tracking.status}
-        onMapReady={() => setMapReady(true)}
-      />
-
-      {/* Top Navigation Bar */}
-      <SafeAreaView style={styles.topBar} edges={['top']}>
-        <TouchableOpacity
-          testID="back-btn"
-          style={styles.backButton}
-          onPress={() => router.back()}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="arrow-back" size={22} color={Colors.foreground} />
-        </TouchableOpacity>
-        
-        <View style={styles.orderBadge}>
-          <Text style={styles.orderBadgeText}>{tracking.order_id}</Text>
-        </View>
-
-        <TouchableOpacity style={styles.helpButton} activeOpacity={0.8}>
-          <Ionicons name="help-circle-outline" size={22} color={Colors.foreground} />
+  if (!order) {
+    return (
+      <SafeAreaView style={styles.centered}>
+        <Ionicons name="alert-circle-outline" size={48} color={Colors.destructive} />
+        <Text style={styles.loadingText}>Order not found</Text>
+        <TouchableOpacity style={styles.goBackBtn} onPress={() => router.back()}>
+          <Text style={styles.goBackText}>Go Back</Text>
         </TouchableOpacity>
       </SafeAreaView>
+    );
+  }
 
-      {/* Status Banner - Grab Style */}
-      <View style={[styles.statusBanner, { backgroundColor: config.color }]}>
-        <View style={styles.statusLeft}>
-          <Animated.View style={[styles.statusIconWrap, { transform: [{ scale: pulseAnim }] }]}>
-            <Ionicons name={config.icon} size={24} color="#fff" />
-          </Animated.View>
-          <View>
-            <Text style={styles.statusLabel}>{config.label}</Text>
-            {isOutForDelivery && tracking.driver && (
-              <Text style={styles.statusSub}>{tracking.driver.name} is bringing your order</Text>
-            )}
-          </View>
+  const isCancelled    = order.status === 'cancelled';
+  const isCompleted    = order.status === 'completed';
+  const activeColor    = STATUS_COLOR[order.status] ?? Colors.primary;
+  const currentStepIdx = getStepIndex(order.status);
+
+  return (
+    <Animated.View style={[styles.container, { opacity: fadeAnim }]}>
+      <View style={[styles.heroBg, { backgroundColor: activeColor + '18' }]} />
+
+      {/* Top bar */}
+      <SafeAreaView style={styles.topBar} edges={['top']}>
+        <TouchableOpacity style={styles.navBtn} onPress={() => router.back()} activeOpacity={0.8}>
+          <Ionicons name="arrow-back" size={22} color={Colors.foreground} />
+        </TouchableOpacity>
+        <View style={styles.orderBadge}>
+          <Ionicons name="receipt-outline" size={14} color={Colors.primary} />
+          <Text style={styles.orderBadgeText}>{order.order_number}</Text>
         </View>
-        {etaMinutes !== null && !isDelivered && (
-          <View style={styles.etaBadge}>
-            <Ionicons name="time-outline" size={14} color="#fff" />
-            <Text style={styles.etaText}>{etaMinutes} min</Text>
+        <View style={{ width: 44 }} />
+      </SafeAreaView>
+
+      {/* Hero status icon */}
+      <View style={styles.heroCenter}>
+        <Animated.View style={[
+          styles.bigIconWrap,
+          { backgroundColor: activeColor, transform: [{ scale: pulseAnim }] },
+        ]}>
+          <Ionicons name={STATUS_ICON[order.status] ?? 'receipt'} size={52} color="#fff" />
+        </Animated.View>
+
+        <Text style={[styles.bigLabel, { color: activeColor }]}>
+          {STATUS_LABEL[order.status] ?? order.status}
+        </Text>
+
+        {!isCompleted && !isCancelled && (
+          <View style={[styles.liveChip, { backgroundColor: activeColor }]}>
+            <View style={styles.liveDot} />
+            <Text style={styles.liveText}>Live updates</Text>
           </View>
         )}
       </View>
 
-      {/* Bottom Sheet - Grab Style */}
-      <Animated.View style={[styles.bottomSheet, { height: sheetHeight }]}>
-        {/* Handle */}
-        <TouchableOpacity
-          testID="sheet-handle"
-          style={styles.sheetHandleArea}
-          onPress={toggleSheet}
-          activeOpacity={0.9}
-        >
-          <View style={styles.sheetHandle} />
-          <Text style={styles.sheetToggleText}>
-            {expanded ? 'Tap to collapse' : 'Tap for details'}
-          </Text>
+      {/* Bottom sheet */}
+      <Animated.View style={[styles.sheet, { height: sheetHeight, paddingBottom: insets.bottom }]}>
+        <TouchableOpacity style={styles.handleWrap} onPress={toggleSheet} activeOpacity={0.9}>
+          <View style={styles.handle} />
+          <Text style={styles.handleLabel}>{expanded ? 'Collapse' : 'Show order details'}</Text>
         </TouchableOpacity>
 
         <ScrollView
           showsVerticalScrollIndicator={false}
-          style={styles.sheetContent}
           scrollEnabled={expanded}
+          contentContainerStyle={styles.sheetBody}
         >
-          {/* Driver Card - Show when out for delivery */}
-          {tracking.driver && isOutForDelivery && (
-            <View style={styles.driverCard}>
-              <View style={styles.driverAvatar}>
-                {tracking.driver.picture ? (
-                  <Image source={{ uri: tracking.driver.picture }} style={styles.driverImage} />
-                ) : (
-                  <Text style={styles.driverInitial}>
-                    {tracking.driver.name?.charAt(0) || 'D'}
-                  </Text>
-                )}
-                <View style={styles.onlineDot} />
-              </View>
-              <View style={styles.driverInfo}>
-                <Text style={styles.driverName}>{tracking.driver.name}</Text>
-                <Text style={styles.driverVehicle}>
-                  {tracking.driver.vehicle} • {tracking.driver.plate}
-                </Text>
-              </View>
-              <TouchableOpacity
-                testID="call-driver-btn"
-                style={styles.actionBtn}
-                onPress={handleCall}
-                activeOpacity={0.8}
-              >
-                <Ionicons name="call" size={20} color="#00B14F" />
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn} activeOpacity={0.8}>
-                <Ionicons name="chatbubble-ellipses" size={20} color={Colors.primary} />
-              </TouchableOpacity>
-            </View>
-          )}
+          {/* Status timeline */}
+          {!isCancelled && (
+            <View style={styles.timeline}>
+              {STEPS.map((step, idx) => {
+                const done   = idx <= currentStepIdx;
+                const active = idx === currentStepIdx;
+                const clr    = done ? STATUS_COLOR[step.key] : '#D1D5DB';
+                const isLast = idx === STEPS.length - 1;
 
-          {/* Order Timeline */}
-          <View style={styles.timeline}>
-            {tracking.steps.map((step, idx) => {
-              const isActive = step.completed && !tracking.steps[idx + 1]?.completed;
-              const stepConfig = STATUS_CONFIG[step.key] || STATUS_CONFIG.confirmed;
-              const isLast = idx === tracking.steps.length - 1;
-              
-              return (
-                <View key={step.key} style={styles.timelineRow}>
-                  <View style={styles.timelineLeft}>
-                    <View style={[
-                      styles.timelineDot,
-                      step.completed && { backgroundColor: stepConfig.color, borderColor: stepConfig.color },
-                      isActive && styles.timelineDotActive,
-                    ]}>
-                      {step.completed && (
-                        <Ionicons name="checkmark" size={10} color="#fff" />
+                return (
+                  <View key={step.key} style={styles.tRow}>
+                    <View style={styles.tLeft}>
+                      <View style={[
+                        styles.tDot,
+                        { borderColor: clr, backgroundColor: done ? clr : '#fff' },
+                        active && styles.tDotActive,
+                      ]}>
+                        {done && <Ionicons name="checkmark" size={11} color="#fff" />}
+                      </View>
+                      {!isLast && <View style={[styles.tLine, { backgroundColor: done && !active ? clr : '#E5E7EB' }]} />}
+                    </View>
+                    <View style={styles.tRight}>
+                      <Ionicons name={step.icon} size={16} color={done ? clr : '#9CA3AF'} />
+                      <Text style={[styles.tLabel, done && { color: Colors.foreground }, active && { fontWeight: '700', color: clr }]}>
+                        {step.label}
+                      </Text>
+                      {active && (
+                        <View style={[styles.nowChip, { backgroundColor: clr + '22' }]}>
+                          <Text style={[styles.nowText, { color: clr }]}>Now</Text>
+                        </View>
                       )}
                     </View>
-                    {!isLast && (
-                      <View style={[
-                        styles.timelineLine,
-                        step.completed && { backgroundColor: stepConfig.color },
-                      ]} />
-                    )}
                   </View>
-                  <View style={styles.timelineContent}>
-                    <Text style={[
-                      styles.timelineLabel,
-                      step.completed && styles.timelineLabelActive,
-                      isActive && { color: stepConfig.color, fontWeight: '700' },
-                    ]}>
-                      {step.label}
-                    </Text>
-                  </View>
-                </View>
-              );
-            })}
-          </View>
-
-          {/* Delivery Address */}
-          <View style={styles.addressCard}>
-            <View style={styles.addressIcon}>
-              <Ionicons name="location" size={20} color="#00B14F" />
-            </View>
-            <View style={styles.addressContent}>
-              <Text style={styles.addressTitle}>Delivering to</Text>
-              <Text style={styles.addressText}>{tracking.delivery_address}</Text>
-            </View>
-          </View>
-
-          {/* Order Summary */}
-          {tracking.items.length > 0 && (
-            <View style={styles.orderSummary}>
-              <View style={styles.summaryHeader}>
-                <Text style={styles.summaryTitle}>
-                  {tracking.items.length} item{tracking.items.length > 1 ? 's' : ''}
-                </Text>
-                <Text style={styles.summaryTotal}>${tracking.total?.toFixed(2)}</Text>
-              </View>
-              {expanded && tracking.items.map((item, idx) => (
-                <View key={idx} style={styles.itemRow}>
-                  <Text style={styles.itemQty}>{item.quantity}x</Text>
-                  <Text style={styles.itemName}>{item.product_name}</Text>
-                  <Text style={styles.itemPrice}>${item.total_price?.toFixed(2)}</Text>
-                </View>
-              ))}
+                );
+              })}
             </View>
           )}
 
-          {/* Reorder Button */}
-          {isDelivered && (
+          {isCancelled && (
+            <View style={styles.cancelBanner}>
+              <Ionicons name="close-circle" size={24} color={Colors.destructive} />
+              <Text style={styles.cancelText}>This order was cancelled</Text>
+            </View>
+          )}
+
+          {/* Items */}
+          <Text style={styles.sectionTitle}>Order Items</Text>
+          {(order.items ?? []).map((item, i) => (
+            <View key={i} style={styles.itemRow}>
+              <Text style={styles.itemQty}>{item.quantity}×</Text>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.itemName}>{item.name}</Text>
+                {(item as any).variants?.length > 0 && (
+                  <Text style={styles.itemSub}>
+                    {(item as any).variants.map((v: any) => v.option_name).join(' · ')}
+                  </Text>
+                )}
+                {(item as any).addons?.length > 0 && (
+                  <Text style={styles.itemSub}>
+                    +{(item as any).addons.map((a: any) => a.name).join(', ')}
+                  </Text>
+                )}
+              </View>
+              <Text style={styles.itemPrice}>
+                ${(((item as any).unit_price ?? 0) * item.quantity).toFixed(2)}
+              </Text>
+            </View>
+          ))}
+
+          {/* Summary */}
+          <View style={styles.summaryCard}>
+            <View style={styles.sRow}>
+              <Text style={styles.sLabel}>Subtotal</Text>
+              <Text style={styles.sVal}>${order.subtotal?.toFixed(2)}</Text>
+            </View>
+            {order.tax > 0 && (
+              <View style={styles.sRow}>
+                <Text style={styles.sLabel}>Tax</Text>
+                <Text style={styles.sVal}>${order.tax?.toFixed(2)}</Text>
+              </View>
+            )}
+            <View style={[styles.sRow, styles.totalRow]}>
+              <Text style={styles.totalLabel}>Total</Text>
+              <Text style={styles.totalVal}>${order.total?.toFixed(2)}</Text>
+            </View>
+            <View style={[styles.sRow, { marginTop: 6 }]}>
+              <Text style={styles.sLabel}>Payment</Text>
+              <View style={[styles.payBadge, {
+                backgroundColor: order.payment_status === 'paid' ? '#D1FAE5' : '#FEF3C7',
+              }]}>
+                <Ionicons
+                  name={order.payment_status === 'paid' ? 'checkmark-circle' : 'time-outline'}
+                  size={13}
+                  color={order.payment_status === 'paid' ? '#059669' : '#D97706'}
+                />
+                <Text style={[styles.payText, {
+                  color: order.payment_status === 'paid' ? '#059669' : '#D97706',
+                }]}>
+                  {order.payment_method?.toUpperCase()} · {order.payment_status}
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          {isCompleted && (
             <TouchableOpacity
               testID="reorder-btn"
               style={styles.reorderBtn}
@@ -313,367 +291,74 @@ export default function GrabStyleTracking() {
             </TouchableOpacity>
           )}
 
-          <View style={{ height: insets.bottom + 20 }} />
+          <TouchableOpacity style={styles.ordersLink} onPress={() => router.replace('/(tabs)/orders')}>
+            <Text style={styles.ordersLinkText}>View all orders</Text>
+          </TouchableOpacity>
         </ScrollView>
       </Animated.View>
-    </View>
+    </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#E8E4E0',
-  },
-  loadingContainer: {
-    flex: 1,
-    backgroundColor: Colors.background,
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: Typography.base,
-    color: Colors.mutedForeground,
-  },
+  container: { flex: 1, backgroundColor: Colors.background },
+  heroBg:    { ...StyleSheet.absoluteFillObject },
+  centered:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, backgroundColor: Colors.background },
+  loadingText: { fontSize: Typography.base, color: Colors.mutedForeground },
+  goBackBtn:   { marginTop: 8, paddingVertical: 10, paddingHorizontal: 24, backgroundColor: Colors.primary, borderRadius: BorderRadius.full },
+  goBackText:  { color: Colors.primaryForeground, fontWeight: '600' },
 
-  // Top Bar
-  topBar: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? 12 : 0,
-    paddingBottom: 12,
-    zIndex: 100,
-  },
-  backButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadows.medium,
-  },
-  orderBadge: {
-    backgroundColor: '#fff',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 20,
-    ...Shadows.small,
-  },
-  orderBadgeText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Colors.foreground,
-    letterSpacing: 0.3,
-  },
-  helpButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    ...Shadows.medium,
-  },
+  topBar:       { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingBottom: 8 },
+  navBtn:       { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.card, alignItems: 'center', justifyContent: 'center', ...Shadows.small },
+  orderBadge:   { flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: Colors.card, paddingHorizontal: 14, paddingVertical: 9, borderRadius: 20, ...Shadows.small },
+  orderBadgeText: { fontSize: 13, fontWeight: '700', color: Colors.foreground },
 
-  // Status Banner
-  statusBanner: {
-    position: 'absolute',
-    top: Platform.OS === 'ios' ? 110 : 90,
-    left: 16,
-    right: 16,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingVertical: 14,
-    paddingHorizontal: 18,
-    borderRadius: 20,
-    zIndex: 90,
-    ...Shadows.large,
-  },
-  statusLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    flex: 1,
-  },
-  statusIconWrap: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusLabel: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  statusSub: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 2,
-  },
-  etaBadge: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 5,
-    backgroundColor: 'rgba(255,255,255,0.25)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 14,
-  },
-  etaText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#fff',
-  },
+  heroCenter:  { flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingBottom: SHEET_MIN * 0.35 },
+  bigIconWrap: { width: 110, height: 110, borderRadius: 55, alignItems: 'center', justifyContent: 'center', ...Shadows.large },
+  bigLabel:    { fontSize: Typography['2xl'], fontWeight: '800' },
+  liveChip:    { flexDirection: 'row', alignItems: 'center', gap: 7, paddingHorizontal: 14, paddingVertical: 7, borderRadius: BorderRadius.full },
+  liveDot:     { width: 8, height: 8, borderRadius: 4, backgroundColor: '#fff' },
+  liveText:    { fontSize: Typography.xs, fontWeight: '700', color: '#fff' },
 
-  // Bottom Sheet
-  bottomSheet: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    borderTopLeftRadius: 28,
-    borderTopRightRadius: 28,
-    ...Shadows.large,
-    zIndex: 200,
-  },
-  sheetHandleArea: {
-    alignItems: 'center',
-    paddingTop: 14,
-    paddingBottom: 8,
-  },
-  sheetHandle: {
-    width: 40,
-    height: 4,
-    borderRadius: 2,
-    backgroundColor: '#E0E0E0',
-  },
-  sheetToggleText: {
-    fontSize: 11,
-    color: Colors.mutedForeground,
-    marginTop: 6,
-  },
-  sheetContent: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
+  sheet:       { position: 'absolute', bottom: 0, left: 0, right: 0, backgroundColor: Colors.card, borderTopLeftRadius: 28, borderTopRightRadius: 28, ...Shadows.large },
+  handleWrap:  { alignItems: 'center', paddingTop: 14, paddingBottom: 4 },
+  handle:      { width: 42, height: 4, borderRadius: 2, backgroundColor: '#E0E0E0' },
+  handleLabel: { fontSize: Typography.xs, color: Colors.mutedForeground, marginTop: 6 },
+  sheetBody:   { paddingHorizontal: 20, paddingBottom: 24 },
 
-  // Driver Card
-  driverCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F0F0F0',
-  },
-  driverAvatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: '#00B14F',
-    alignItems: 'center',
-    justifyContent: 'center',
-    position: 'relative',
-  },
-  driverImage: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-  },
-  driverInitial: {
-    fontSize: 22,
-    fontWeight: '700',
-    color: '#fff',
-  },
-  onlineDot: {
-    position: 'absolute',
-    bottom: 2,
-    right: 2,
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: '#00B14F',
-    borderWidth: 2,
-    borderColor: '#fff',
-  },
-  driverInfo: {
-    flex: 1,
-    marginLeft: 14,
-  },
-  driverName: {
-    fontSize: 17,
-    fontWeight: '700',
-    color: Colors.foreground,
-  },
-  driverVehicle: {
-    fontSize: 13,
-    color: Colors.mutedForeground,
-    marginTop: 3,
-  },
-  actionBtn: {
-    width: 46,
-    height: 46,
-    borderRadius: 23,
-    backgroundColor: '#F5F5F5',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginLeft: 10,
-  },
+  timeline: { paddingVertical: 12, marginBottom: 8 },
+  tRow:     { flexDirection: 'row', minHeight: 48 },
+  tLeft:    { width: 34, alignItems: 'center' },
+  tDot:     { width: 24, height: 24, borderRadius: 12, borderWidth: 2, alignItems: 'center', justifyContent: 'center' },
+  tDotActive: { width: 28, height: 28, borderRadius: 14, borderWidth: 3, borderColor: '#fff', ...Shadows.small },
+  tLine:    { width: 2, flex: 1, marginVertical: 4 },
+  tRight:   { flex: 1, flexDirection: 'row', alignItems: 'center', gap: 8, paddingLeft: 12, paddingBottom: 18 },
+  tLabel:   { flex: 1, fontSize: Typography.sm, color: '#9CA3AF' },
+  nowChip:  { paddingHorizontal: 8, paddingVertical: 3, borderRadius: BorderRadius.full },
+  nowText:  { fontSize: Typography.xs, fontWeight: '700' },
 
-  // Timeline
-  timeline: {
-    paddingTop: 16,
-    paddingBottom: 8,
-  },
-  timelineRow: {
-    flexDirection: 'row',
-    minHeight: 40,
-  },
-  timelineLeft: {
-    width: 32,
-    alignItems: 'center',
-  },
-  timelineDot: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    borderWidth: 2,
-    borderColor: '#E0E0E0',
-    backgroundColor: '#fff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    zIndex: 1,
-  },
-  timelineDotActive: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 3,
-    borderColor: '#fff',
-    ...Shadows.medium,
-  },
-  timelineLine: {
-    width: 2,
-    flex: 1,
-    backgroundColor: '#E0E0E0',
-    marginVertical: 4,
-  },
-  timelineContent: {
-    flex: 1,
-    paddingLeft: 14,
-    paddingBottom: 16,
-    justifyContent: 'center',
-  },
-  timelineLabel: {
-    fontSize: 14,
-    color: Colors.mutedForeground,
-  },
-  timelineLabelActive: {
-    color: Colors.foreground,
-    fontWeight: '600',
-  },
+  cancelBanner: { flexDirection: 'row', alignItems: 'center', gap: 10, padding: 14, backgroundColor: '#FEF2F2', borderRadius: BorderRadius.md, marginBottom: 16 },
+  cancelText:   { fontSize: Typography.base, color: Colors.destructive, fontWeight: '600' },
 
-  // Address Card
-  addressCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 14,
-    paddingVertical: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-  },
-  addressIcon: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: 'rgba(0, 177, 79, 0.12)',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addressContent: {
-    flex: 1,
-  },
-  addressTitle: {
-    fontSize: 12,
-    color: Colors.mutedForeground,
-  },
-  addressText: {
-    fontSize: 15,
-    fontWeight: '500',
-    color: Colors.foreground,
-    marginTop: 2,
-  },
+  sectionTitle: { fontSize: Typography.base, fontWeight: '700', color: Colors.foreground, marginBottom: 10 },
+  itemRow:   { flexDirection: 'row', alignItems: 'flex-start', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: Colors.border, gap: 10 },
+  itemQty:   { fontSize: Typography.sm, fontWeight: '700', color: Colors.primary, width: 26 },
+  itemName:  { fontSize: Typography.sm, fontWeight: '500', color: Colors.foreground },
+  itemSub:   { fontSize: Typography.xs, color: Colors.mutedForeground, marginTop: 2 },
+  itemPrice: { fontSize: Typography.sm, fontWeight: '600', color: Colors.foreground },
 
-  // Order Summary
-  orderSummary: {
-    borderTopWidth: 1,
-    borderTopColor: '#F0F0F0',
-    paddingVertical: 16,
-  },
-  summaryHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  summaryTitle: {
-    fontSize: 14,
-    color: Colors.mutedForeground,
-  },
-  summaryTotal: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: Colors.primary,
-  },
-  itemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    gap: 10,
-  },
-  itemQty: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Colors.primary,
-    width: 28,
-  },
-  itemName: {
-    flex: 1,
-    fontSize: 14,
-    color: Colors.foreground,
-  },
-  itemPrice: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: Colors.foreground,
-  },
+  summaryCard: { backgroundColor: Colors.muted, borderRadius: BorderRadius.lg, padding: 16, marginTop: 16, marginBottom: 16 },
+  sRow:        { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  sLabel:      { fontSize: Typography.sm, color: Colors.mutedForeground },
+  sVal:        { fontSize: Typography.sm, color: Colors.foreground, fontWeight: '500' },
+  totalRow:    { borderTopWidth: 1, borderTopColor: Colors.border, paddingTop: 10, marginTop: 4 },
+  totalLabel:  { fontSize: Typography.base, fontWeight: '700', color: Colors.foreground },
+  totalVal:    { fontSize: Typography.xl, fontWeight: '800', color: Colors.primary },
+  payBadge:    { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, paddingVertical: 5, borderRadius: BorderRadius.full },
+  payText:     { fontSize: Typography.xs, fontWeight: '700' },
 
-  // Reorder Button
-  reorderBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    gap: 10,
-    backgroundColor: '#00B14F',
-    borderRadius: 50,
-    paddingVertical: 18,
-    marginTop: 8,
-    ...Shadows.medium,
-  },
-  reorderText: {
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#fff',
-  },
+  reorderBtn:   { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, backgroundColor: Colors.primary, borderRadius: BorderRadius.full, paddingVertical: 16, marginBottom: 12, ...Shadows.medium },
+  reorderText:  { fontSize: Typography.base, fontWeight: '700', color: Colors.primaryForeground },
+  ordersLink:   { alignItems: 'center', paddingVertical: 12 },
+  ordersLinkText: { fontSize: Typography.sm, color: Colors.primary, fontWeight: '500' },
 });

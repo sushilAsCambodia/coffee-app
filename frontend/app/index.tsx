@@ -7,16 +7,17 @@ import { useRouter } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext';
-import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../src/constants/theme';
-import * as WebBrowser from 'expo-web-browser';
+import { Colors, Typography, BorderRadius, Shadows } from '../src/constants/theme';
 
-const { width, height } = Dimensions.get('window');
-const LOGO_URL = 'https://customer-assets.emergentagent.com/job_caffeine-hub-15/artifacts/68ek0vii_image.png';
+const LOGO = require('../assets/images/cafe-system-icon.png');
 
-export default function LoginScreen() {
+export default function AuthScreen() {
   const router = useRouter();
-  const { user, loading, login, loginWithGoogle } = useAuth();
-  const [email, setEmail] = useState('');
+  const { user, loading, login, register } = useAuth();
+
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [name, setName]         = useState('');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -24,13 +25,15 @@ export default function LoginScreen() {
 
   useEffect(() => {
     if (!loading && user) {
-      if (user.role === 'admin') router.replace('/(admin)/dashboard');
-      else if (user.role === 'driver') router.replace('/(driver)/dashboard');
-      else router.replace('/(tabs)/home');
+      router.replace('/(tabs)/home');
     }
   }, [user, loading]);
 
-  const handleLogin = async () => {
+  const handleSubmit = async () => {
+    if (mode === 'register' && !name.trim()) {
+      setError('Please enter your name');
+      return;
+    }
     if (!email.trim() || !password.trim()) {
       setError('Please fill in all fields');
       return;
@@ -38,25 +41,24 @@ export default function LoginScreen() {
     setIsLoading(true);
     setError('');
     try {
-      const result = await login(email.trim(), password);
-      // AuthContext sets user, useEffect handles routing
+      if (mode === 'login') {
+        await login(email.trim(), password);
+      } else {
+        await register(email.trim(), password, name.trim());
+      }
     } catch (e: any) {
-      setError(e.message || 'Login failed');
+      setError(e.message || (mode === 'login' ? 'Login failed.' : 'Registration failed.'));
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleGoogleLogin = async () => {
-    // REMINDER: DO NOT HARDCODE THE URL, OR ADD ANY FALLBACKS OR REDIRECT URLS, THIS BREAKS THE AUTH
-    try {
-      const backendUrl = process.env.EXPO_PUBLIC_BACKEND_URL;
-      const redirectUrl = `${backendUrl}/auth-callback`;
-      const authUrl = `https://auth.emergentagent.com/?redirect=${encodeURIComponent(redirectUrl)}`;
-      await WebBrowser.openBrowserAsync(authUrl);
-    } catch (e) {
-      setError('Google login failed');
-    }
+  const switchMode = () => {
+    setMode(m => m === 'login' ? 'register' : 'login');
+    setError('');
+    setName('');
+    setEmail('');
+    setPassword('');
   };
 
   if (loading) {
@@ -70,21 +72,20 @@ export default function LoginScreen() {
   return (
     <View style={styles.container}>
       <LinearGradient colors={['rgba(61,40,23,0.85)', 'rgba(61,40,23,0.95)']} style={StyleSheet.absoluteFill} />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.flex}
-      >
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent} keyboardShouldPersistTaps="handled">
-          {/* Logo Area */}
           <View style={styles.logoArea}>
-            <Image source={{ uri: LOGO_URL }} style={styles.logo} resizeMode="contain" />
+            <Image source={LOGO} style={styles.logo} resizeMode="contain" />
             <Text style={styles.tagline}>Premium Coffee, Delivered</Text>
           </View>
 
-          {/* Login Form */}
           <View style={styles.formCard}>
-            <Text style={styles.formTitle}>Welcome Back</Text>
-            <Text style={styles.formSubtitle}>Sign in to continue</Text>
+            <Text style={styles.formTitle}>
+              {mode === 'login' ? 'Welcome Back' : 'Create Account'}
+            </Text>
+            <Text style={styles.formSubtitle}>
+              {mode === 'login' ? 'Sign in to continue' : 'Join Khmer Empire Coffee'}
+            </Text>
 
             {error ? (
               <View style={styles.errorBox}>
@@ -92,6 +93,21 @@ export default function LoginScreen() {
                 <Text style={styles.errorText}>{error}</Text>
               </View>
             ) : null}
+
+            {mode === 'register' && (
+              <View style={styles.inputContainer}>
+                <Ionicons name="person-outline" size={20} color={Colors.mutedForeground} style={styles.inputIcon} />
+                <TextInput
+                  testID="register-name-input"
+                  style={styles.input}
+                  placeholder="Full name"
+                  placeholderTextColor={Colors.mutedForeground}
+                  value={name}
+                  onChangeText={setName}
+                  autoCapitalize="words"
+                />
+              </View>
+            )}
 
             <View style={styles.inputContainer}>
               <Ionicons name="mail-outline" size={20} color={Colors.mutedForeground} style={styles.inputIcon} />
@@ -118,47 +134,55 @@ export default function LoginScreen() {
                 onChangeText={setPassword}
                 secureTextEntry={!showPassword}
               />
-              <TouchableOpacity testID="toggle-password-btn" onPress={() => setShowPassword(!showPassword)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Ionicons name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={Colors.mutedForeground} />
+              <TouchableOpacity
+                testID="toggle-password-btn"
+                onPress={() => setShowPassword(!showPassword)}
+                hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+              >
+                <Ionicons
+                  name={showPassword ? 'eye-off-outline' : 'eye-outline'}
+                  size={20}
+                  color={Colors.mutedForeground}
+                />
               </TouchableOpacity>
             </View>
 
-            <TouchableOpacity testID="login-submit-btn" style={styles.loginBtn} onPress={handleLogin} disabled={isLoading} activeOpacity={0.8}>
+            <TouchableOpacity
+              testID="login-submit-btn"
+              style={styles.loginBtn}
+              onPress={handleSubmit}
+              disabled={isLoading}
+              activeOpacity={0.8}
+            >
               {isLoading ? (
                 <ActivityIndicator color={Colors.primaryForeground} />
               ) : (
-                <Text style={styles.loginBtnText}>Sign In</Text>
+                <Text style={styles.loginBtnText}>
+                  {mode === 'login' ? 'Sign In' : 'Create Account'}
+                </Text>
               )}
             </TouchableOpacity>
 
-            <View style={styles.divider}>
-              <View style={styles.dividerLine} />
-              <Text style={styles.dividerText}>or</Text>
-              <View style={styles.dividerLine} />
-            </View>
-
-            <TouchableOpacity testID="google-login-btn" style={styles.googleBtn} onPress={handleGoogleLogin} activeOpacity={0.8}>
-              <Ionicons name="logo-google" size={20} color={Colors.foreground} />
-              <Text style={styles.googleBtnText}>Continue with Google</Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity testID="go-to-register-btn" onPress={() => router.push('/register')} style={styles.registerLink}>
-              <Text style={styles.registerText}>
-                Don't have an account? <Text style={styles.registerTextBold}>Sign Up</Text>
+            <TouchableOpacity style={styles.switchBtn} onPress={switchMode}>
+              <Text style={styles.switchText}>
+                {mode === 'login'
+                  ? "Don't have an account? "
+                  : 'Already have an account? '}
+                <Text style={styles.switchLink}>
+                  {mode === 'login' ? 'Register' : 'Sign In'}
+                </Text>
               </Text>
             </TouchableOpacity>
 
-            {/* Demo credentials hint */}
-            <View style={styles.demoHint}>
-              <Ionicons name="information-circle-outline" size={14} color={Colors.mutedForeground} />
-              <Text style={styles.demoText}>Customer: demo@cafeempire.com / demo123</Text>
-            </View>
-            <View style={styles.demoHint}>
-              <Text style={styles.demoText}>Admin: admin@cafeempire.com / admin123</Text>
-            </View>
-            <View style={styles.demoHint}>
-              <Text style={styles.demoText}>Driver: driver1@cafeempire.com / driver123</Text>
-            </View>
+            {mode === 'login' && (
+              <View style={styles.demoBox}>
+                <Ionicons name="information-circle-outline" size={14} color={Colors.mutedForeground} />
+                <View>
+                  <Text style={styles.demoLabel}>Demo account:</Text>
+                  <Text style={styles.demoText}>demo@coffeeapp.com  /  password</Text>
+                </View>
+              </View>
+            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -174,56 +198,34 @@ const styles = StyleSheet.create({
   logoArea: { alignItems: 'center', marginBottom: 32 },
   logo: { width: 140, height: 140, borderRadius: 20 },
   tagline: { color: Colors.accent, fontSize: Typography.lg, fontWeight: '300', marginTop: 12, letterSpacing: 1 },
-  formCard: {
-    backgroundColor: Colors.card,
-    borderRadius: BorderRadius.xl,
-    padding: 28,
-    ...Shadows.large,
-  },
+  formCard: { backgroundColor: Colors.card, borderRadius: BorderRadius.xl, padding: 28, ...Shadows.large },
   formTitle: { fontSize: Typography['3xl'], fontWeight: '700', color: Colors.foreground, marginBottom: 4 },
   formSubtitle: { fontSize: Typography.base, color: Colors.mutedForeground, marginBottom: 24 },
-  errorBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#fef2f2', padding: 12, borderRadius: BorderRadius.md, marginBottom: 16, gap: 8 },
+  errorBox: {
+    flexDirection: 'row', alignItems: 'center', backgroundColor: '#fef2f2',
+    padding: 12, borderRadius: BorderRadius.md, marginBottom: 16, gap: 8,
+  },
   errorText: { color: Colors.destructive, fontSize: Typography.sm, flex: 1 },
   inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: Colors.inputBackground,
-    borderRadius: BorderRadius.md,
-    paddingHorizontal: 14,
+    flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBackground,
+    borderRadius: BorderRadius.md, paddingHorizontal: 14,
     paddingVertical: Platform.OS === 'ios' ? 14 : 4,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
+    marginBottom: 14, borderWidth: 1, borderColor: Colors.border,
   },
   inputIcon: { marginRight: 10 },
   input: { flex: 1, fontSize: Typography.base, color: Colors.foreground },
   loginBtn: {
-    backgroundColor: Colors.primary,
-    borderRadius: BorderRadius.full,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 8,
-    ...Shadows.small,
+    backgroundColor: Colors.primary, borderRadius: BorderRadius.full,
+    paddingVertical: 16, alignItems: 'center', marginTop: 8, ...Shadows.small,
   },
   loginBtnText: { color: Colors.primaryForeground, fontSize: Typography.base, fontWeight: '600' },
-  divider: { flexDirection: 'row', alignItems: 'center', marginVertical: 20 },
-  dividerLine: { flex: 1, height: 1, backgroundColor: Colors.border },
-  dividerText: { paddingHorizontal: 16, color: Colors.mutedForeground, fontSize: Typography.sm },
-  googleBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: Colors.card,
-    borderRadius: BorderRadius.full,
-    paddingVertical: 14,
-    borderWidth: 1,
-    borderColor: Colors.border,
-    gap: 10,
+  switchBtn: { marginTop: 20, alignItems: 'center' },
+  switchText: { fontSize: Typography.sm, color: Colors.mutedForeground },
+  switchLink: { color: Colors.primary, fontWeight: '600' },
+  demoBox: {
+    flexDirection: 'row', gap: 8, alignItems: 'flex-start',
+    marginTop: 20, backgroundColor: Colors.muted, padding: 12, borderRadius: BorderRadius.md,
   },
-  googleBtnText: { color: Colors.foreground, fontSize: Typography.base, fontWeight: '500' },
-  registerLink: { alignItems: 'center', marginTop: 20 },
-  registerText: { color: Colors.mutedForeground, fontSize: Typography.sm },
-  registerTextBold: { color: Colors.primary, fontWeight: '600' },
-  demoHint: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 16, gap: 6 },
+  demoLabel: { color: Colors.mutedForeground, fontSize: Typography.xs, fontWeight: '600', marginBottom: 4 },
   demoText: { color: Colors.mutedForeground, fontSize: Typography.xs },
 });

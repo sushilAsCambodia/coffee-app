@@ -7,51 +7,43 @@ import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
-import { api } from '../../src/services/api';
+import { useCart } from '../../src/context/CartContext';
+import { api, Category, Menu } from '../../src/services/api';
+import { setProductCache } from '../../src/utils/productCache';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../src/constants/theme';
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 60) / 2;
-const LOGO_URL = 'https://customer-assets.emergentagent.com/job_caffeine-hub-15/artifacts/68ek0vii_image.png';
-
-const CATEGORY_ICONS: Record<string, string> = {
-  cafe: 'cafe', snow: 'snow', leaf: 'leaf', 'ice-cream': 'ice-cream-outline',
-};
-
-const PRODUCT_IMAGES: Record<string, string> = {
-  latte: 'https://images.unsplash.com/photo-1561522983-385a76fbb4cb?w=400',
-  cappuccino: 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=400',
-  americano: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefda?w=400',
-  mocha: 'https://images.unsplash.com/photo-1578314675249-a6910f80cc4e?w=400',
-  flatwhite: 'https://images.unsplash.com/photo-1577968897966-3d4325b36b61?w=400',
-  iced_latte: 'https://images.unsplash.com/photo-1695741996464-857c90c635c3?w=400',
-  cold_brew: 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=400',
-  frappe: 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=400',
-  matcha: 'https://images.unsplash.com/photo-1515823064-d6e0c04616a7?w=400',
-  chai: 'https://images.unsplash.com/photo-1557006021-b85faa2bc5e2?w=400',
-  hotchoc: 'https://images.unsplash.com/photo-1542990253-0d0f5be5f0ed?w=400',
-  tiramisu: 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=400',
-  croissant: 'https://images.unsplash.com/photo-1555507036-ab1f4038024a?w=400',
-  cheesecake: 'https://images.unsplash.com/photo-1524351199678-941a58a3df50?w=400',
-};
+const LOGO = require('../../assets/images/cafe-system-icon.png');
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1561522983-385a76fbb4cb?w=400';
 
 export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
-  const [categories, setCategories] = useState<any[]>([]);
-  const [products, setProducts] = useState<any[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const { count } = useCart();
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [allProducts, setAllProducts] = useState<Menu[]>([]);
+  const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
   const [search, setSearch] = useState('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadData = useCallback(async () => {
     try {
-      const [cats, prods] = await Promise.all([api.getCategories(), api.getProducts()]);
+      const cats = await api.getCategories();
       setCategories(cats);
-      setProducts(prods);
+
+      // Fetch menus for all categories in parallel
+      const results = await Promise.all(
+        cats.map(cat => api.getMenusByCategory(cat.id).then(menus =>
+          menus.map(m => ({ ...m, category_name: cat.name, category_id: cat.id }))
+        ))
+      );
+      const merged = results.flat();
+      setAllProducts(merged);
+      setProductCache(merged);
     } catch (e) {
-      console.error(e);
+      console.error('[home] loadData error', e);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -60,13 +52,13 @@ export default function HomeScreen() {
 
   useEffect(() => { loadData(); }, []);
 
-  const filteredProducts = products.filter(p => {
-    if (selectedCategory && p.category_id !== selectedCategory) return false;
+  const filteredProducts = allProducts.filter(p => {
+    if (selectedCategory !== null && p.category_id !== selectedCategory) return false;
     if (search && !p.name.toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
 
-  const popularProducts = products.filter(p => p.is_popular);
+  const featuredProducts = allProducts.slice(0, 5);
 
   const getGreeting = () => {
     const h = new Date().getHours();
@@ -75,27 +67,40 @@ export default function HomeScreen() {
     return 'Good Evening';
   };
 
-  const renderProductCard = ({ item }: { item: any }) => (
+  const getEffectivePrice = (item: Menu) =>
+    item.has_active_promotion && item.discounted_price != null
+      ? item.discounted_price
+      : item.base_price;
+
+  const renderProductCard = ({ item }: { item: Menu }) => (
     <TouchableOpacity
-      testID={`product-card-${item.product_id}`}
+      testID={`product-card-${item.id}`}
       style={styles.productCard}
-      onPress={() => router.push(`/product/${item.product_id}`)}
+      onPress={() => router.push(`/product/${item.id}`)}
       activeOpacity={0.85}
     >
-      <Image source={{ uri: PRODUCT_IMAGES[item.image] || PRODUCT_IMAGES.latte }} style={styles.productImage} />
+      <Image
+        source={{ uri: item.product_image || FALLBACK_IMAGE }}
+        style={styles.productImage}
+        defaultSource={{ uri: FALLBACK_IMAGE }}
+      />
+      {item.has_active_promotion && (
+        <View style={styles.promoBadge}>
+          <Text style={styles.promoText}>SALE</Text>
+        </View>
+      )}
       <View style={styles.productInfo}>
         <Text style={styles.productName} numberOfLines={1}>{item.name}</Text>
-        <View style={styles.ratingRow}>
-          <Ionicons name="star" size={12} color={Colors.star} />
-          <Text style={styles.ratingText}>{item.rating}</Text>
-          <Text style={styles.reviewsText}>({item.reviews})</Text>
-        </View>
+        <Text style={styles.productCategory} numberOfLines={1}>{item.category_name}</Text>
         <View style={styles.priceRow}>
-          <Text style={styles.price}>${item.base_price.toFixed(2)}</Text>
+          <Text style={styles.price}>${getEffectivePrice(item).toFixed(2)}</Text>
+          {item.has_active_promotion && (
+            <Text style={styles.originalPrice}>${item.base_price.toFixed(2)}</Text>
+          )}
           <TouchableOpacity
-            testID={`quick-add-${item.product_id}`}
+            testID={`quick-add-${item.id}`}
             style={styles.addBtn}
-            onPress={() => router.push(`/product/${item.product_id}`)}
+            onPress={() => router.push(`/product/${item.id}`)}
           >
             <Ionicons name="add" size={18} color={Colors.primaryForeground} />
           </TouchableOpacity>
@@ -116,19 +121,34 @@ export default function HomeScreen() {
     <SafeAreaView style={styles.container} edges={['top']}>
       <ScrollView
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => { setRefreshing(true); loadData(); }} tintColor={Colors.primary} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => { setRefreshing(true); loadData(); }}
+            tintColor={Colors.primary}
+          />
+        }
       >
         {/* Header */}
         <View style={styles.header}>
           <View style={styles.headerLeft}>
-            <Image source={{ uri: LOGO_URL }} style={styles.headerLogo} />
+            <Image source={LOGO} style={styles.headerLogo} resizeMode="contain" />
             <View>
               <Text style={styles.greeting}>{getGreeting()}</Text>
               <Text style={styles.userName}>{user?.name || 'Coffee Lover'}</Text>
             </View>
           </View>
-          <TouchableOpacity testID="cart-icon-btn" onPress={() => router.push('/(tabs)/cart')} style={styles.cartIconBtn}>
+          <TouchableOpacity
+            testID="cart-icon-btn"
+            onPress={() => router.push('/(tabs)/cart')}
+            style={styles.cartIconBtn}
+          >
             <Ionicons name="cart-outline" size={24} color={Colors.foreground} />
+            {count > 0 && (
+              <View style={styles.cartBadge}>
+                <Text style={styles.cartBadgeText}>{count}</Text>
+              </View>
+            )}
           </TouchableOpacity>
         </View>
 
@@ -151,45 +171,52 @@ export default function HomeScreen() {
         </View>
 
         {/* Categories */}
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.categoriesScroll} contentContainerStyle={styles.categoriesContent}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          style={styles.categoriesScroll}
+          contentContainerStyle={styles.categoriesContent}
+        >
           <TouchableOpacity
             testID="category-all"
-            style={[styles.categoryPill, !selectedCategory && styles.categoryPillActive]}
+            style={[styles.categoryPill, selectedCategory === null && styles.categoryPillActive]}
             onPress={() => setSelectedCategory(null)}
           >
-            <Ionicons name="grid" size={16} color={!selectedCategory ? Colors.primaryForeground : Colors.foreground} />
-            <Text style={[styles.categoryText, !selectedCategory && styles.categoryTextActive]}>All</Text>
+            <Ionicons name="grid" size={16} color={selectedCategory === null ? Colors.primaryForeground : Colors.foreground} />
+            <Text style={[styles.categoryText, selectedCategory === null && styles.categoryTextActive]}>All</Text>
           </TouchableOpacity>
           {categories.map(cat => (
             <TouchableOpacity
-              testID={`category-${cat.category_id}`}
-              key={cat.category_id}
-              style={[styles.categoryPill, selectedCategory === cat.category_id && styles.categoryPillActive]}
-              onPress={() => setSelectedCategory(selectedCategory === cat.category_id ? null : cat.category_id)}
+              testID={`category-${cat.id}`}
+              key={cat.id}
+              style={[styles.categoryPill, selectedCategory === cat.id && styles.categoryPillActive]}
+              onPress={() => setSelectedCategory(selectedCategory === cat.id ? null : cat.id)}
             >
-              <Ionicons name={(CATEGORY_ICONS[cat.icon] || 'cafe') as any} size={16} color={selectedCategory === cat.category_id ? Colors.primaryForeground : Colors.foreground} />
-              <Text style={[styles.categoryText, selectedCategory === cat.category_id && styles.categoryTextActive]}>{cat.name}</Text>
+              <Text style={[styles.categoryText, selectedCategory === cat.id && styles.categoryTextActive]}>{cat.name}</Text>
             </TouchableOpacity>
           ))}
         </ScrollView>
 
-        {/* Popular Section (only when no category/search filter) */}
-        {!selectedCategory && !search && popularProducts.length > 0 && (
+        {/* Featured (no filter) */}
+        {selectedCategory === null && !search && featuredProducts.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Popular Now</Text>
+            <Text style={styles.sectionTitle}>Featured</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingLeft: 20 }}>
-              {popularProducts.slice(0, 5).map(item => (
+              {featuredProducts.map(item => (
                 <TouchableOpacity
-                  testID={`popular-${item.product_id}`}
-                  key={item.product_id}
+                  testID={`featured-${item.id}`}
+                  key={item.id}
                   style={styles.popularCard}
-                  onPress={() => router.push(`/product/${item.product_id}`)}
+                  onPress={() => router.push(`/product/${item.id}`)}
                   activeOpacity={0.85}
                 >
-                  <Image source={{ uri: PRODUCT_IMAGES[item.image] || PRODUCT_IMAGES.latte }} style={styles.popularImage} />
+                  <Image
+                    source={{ uri: item.product_image || FALLBACK_IMAGE }}
+                    style={styles.popularImage}
+                  />
                   <View style={styles.popularOverlay}>
                     <Text style={styles.popularName} numberOfLines={1}>{item.name}</Text>
-                    <Text style={styles.popularPrice}>${item.base_price.toFixed(2)}</Text>
+                    <Text style={styles.popularPrice}>${getEffectivePrice(item).toFixed(2)}</Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -200,11 +227,13 @@ export default function HomeScreen() {
         {/* All Products Grid */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            {selectedCategory ? categories.find(c => c.category_id === selectedCategory)?.name || 'Menu' : 'Our Menu'}
+            {selectedCategory !== null
+              ? categories.find(c => c.id === selectedCategory)?.name || 'Menu'
+              : 'Our Menu'}
           </Text>
           <View style={styles.productGrid}>
             {filteredProducts.map(item => (
-              <View key={item.product_id} style={{ width: CARD_WIDTH }}>
+              <View key={item.id} style={{ width: CARD_WIDTH }}>
                 {renderProductCard({ item })}
               </View>
             ))}
@@ -231,6 +260,11 @@ const styles = StyleSheet.create({
   greeting: { fontSize: Typography.sm, color: Colors.mutedForeground },
   userName: { fontSize: Typography.lg, fontWeight: '700', color: Colors.foreground },
   cartIconBtn: { width: 44, height: 44, borderRadius: 22, backgroundColor: Colors.secondary, alignItems: 'center', justifyContent: 'center' },
+  cartBadge: {
+    position: 'absolute', top: 2, right: 2, width: 18, height: 18,
+    borderRadius: 9, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center',
+  },
+  cartBadgeText: { color: Colors.primaryForeground, fontSize: 10, fontWeight: '700' },
   searchContainer: {
     flexDirection: 'row', alignItems: 'center', backgroundColor: Colors.inputBackground,
     marginHorizontal: 20, borderRadius: BorderRadius.lg, paddingHorizontal: 16, paddingVertical: 12,
@@ -248,32 +282,26 @@ const styles = StyleSheet.create({
   categoryTextActive: { color: Colors.primaryForeground },
   section: { marginTop: 28 },
   sectionTitle: { fontSize: Typography.xl, fontWeight: '700', color: Colors.foreground, paddingHorizontal: 20, marginBottom: 16 },
-  popularCard: {
-    width: 200, height: 140, borderRadius: BorderRadius.lg, overflow: 'hidden', marginRight: 14, ...Shadows.medium,
-  },
+  popularCard: { width: 200, height: 140, borderRadius: BorderRadius.lg, overflow: 'hidden', marginRight: 14, ...Shadows.medium },
   popularImage: { width: '100%', height: '100%' },
-  popularOverlay: {
-    position: 'absolute', bottom: 0, left: 0, right: 0, padding: 12,
-    backgroundColor: 'rgba(0,0,0,0.45)',
-  },
+  popularOverlay: { position: 'absolute', bottom: 0, left: 0, right: 0, padding: 12, backgroundColor: 'rgba(0,0,0,0.45)' },
   popularName: { color: '#fff', fontSize: Typography.sm, fontWeight: '600' },
   popularPrice: { color: Colors.accent, fontSize: Typography.base, fontWeight: '700', marginTop: 2 },
   productGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: 20, gap: 16 },
-  productCard: {
-    backgroundColor: Colors.card, borderRadius: BorderRadius.lg, overflow: 'hidden', ...Shadows.small,
-  },
+  productCard: { backgroundColor: Colors.card, borderRadius: BorderRadius.lg, overflow: 'hidden', ...Shadows.small },
   productImage: { width: '100%', height: CARD_WIDTH * 0.75, backgroundColor: Colors.muted },
+  promoBadge: {
+    position: 'absolute', top: 8, left: 8, backgroundColor: Colors.primary,
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: BorderRadius.full,
+  },
+  promoText: { color: Colors.primaryForeground, fontSize: 10, fontWeight: '700' },
   productInfo: { padding: 12 },
   productName: { fontSize: Typography.sm, fontWeight: '600', color: Colors.foreground },
-  ratingRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 4 },
-  ratingText: { fontSize: Typography.xs, fontWeight: '600', color: Colors.foreground },
-  reviewsText: { fontSize: Typography.xs, color: Colors.mutedForeground },
-  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  productCategory: { fontSize: Typography.xs, color: Colors.mutedForeground, marginTop: 2 },
+  priceRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, gap: 4 },
   price: { fontSize: Typography.lg, fontWeight: '700', color: Colors.primary },
-  addBtn: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primary,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  originalPrice: { fontSize: Typography.xs, color: Colors.mutedForeground, textDecorationLine: 'line-through' },
+  addBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: 40, gap: 12 },
   emptyText: { color: Colors.mutedForeground, fontSize: Typography.base },
 });

@@ -1,49 +1,40 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { api } from '../services/api';
+import { api, AuthUser, setToken } from '../services/api';
 
-interface User {
-  user_id: string;
-  email: string;
-  name: string;
-  phone?: string;
-  role?: string;
-  picture?: string;
-}
+const USER_KEY = '@coffee_app_user';
 
 interface AuthContextType {
-  user: User | null;
-  token: string | null;
+  user: AuthUser | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
   register: (email: string, password: string, name: string, phone?: string) => Promise<void>;
-  loginWithGoogle: (sessionId: string) => Promise<void>;
   logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+  loginWithGoogle?: (token: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({} as AuthContextType);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<User | null>(null);
-  const [token, setToken] = useState<string | null>(null);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    checkAuth();
+    restoreSession();
   }, []);
 
-  const checkAuth = async () => {
+  const restoreSession = async () => {
     try {
-      const storedToken = await AsyncStorage.getItem('auth_token');
-      if (storedToken) {
-        setToken(storedToken);
-        const userData = await api.getMe();
-        setUser(userData);
+      const raw = await AsyncStorage.getItem(USER_KEY);
+      if (raw) {
+        // Verify the stored token is still valid by hitting /auth/me
+        const me = await api.getMe();
+        setUser(me);
       }
     } catch {
-      await AsyncStorage.removeItem('auth_token');
-      setToken(null);
+      // Token expired or invalid — clear everything
+      await api.clearSession();
+      await AsyncStorage.removeItem(USER_KEY);
       setUser(null);
     } finally {
       setLoading(false);
@@ -51,42 +42,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const login = async (email: string, password: string) => {
-    const result = await api.login({ email, password });
-    await AsyncStorage.setItem('auth_token', result.token);
-    setToken(result.token);
-    setUser(result.user);
+    const { user: u, token } = await api.login(email, password);
+    await setToken(token);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(u));
+    setUser(u);
   };
 
   const register = async (email: string, password: string, name: string, phone?: string) => {
-    const result = await api.register({ email, password, name, phone });
-    await AsyncStorage.setItem('auth_token', result.token);
-    setToken(result.token);
-    setUser(result.user);
+    const { user: u, token } = await api.register(name, email, password);
+    await setToken(token);
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(u));
+    setUser(u);
   };
 
-  const loginWithGoogle = async (sessionId: string) => {
-    const result = await api.googleSession(sessionId);
-    await AsyncStorage.setItem('auth_token', result.token);
-    setToken(result.token);
-    setUser(result.user);
+  const loginWithGoogle = async (token: string) => {
+    await setToken(token);
+    const me = await api.getMe();
+    await AsyncStorage.setItem(USER_KEY, JSON.stringify(me));
+    setUser(me);
   };
 
   const logout = async () => {
-    try { await api.logout(); } catch {}
-    await AsyncStorage.removeItem('auth_token');
-    setToken(null);
+    await api.logout();
+    await api.clearSession();
+    await AsyncStorage.removeItem(USER_KEY);
     setUser(null);
   };
 
-  const refreshUser = async () => {
-    try {
-      const userData = await api.getMe();
-      setUser(userData);
-    } catch {}
-  };
-
   return (
-    <AuthContext.Provider value={{ user, token, loading, login, register, loginWithGoogle, logout, refreshUser }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, loginWithGoogle }}>
       {children}
     </AuthContext.Provider>
   );

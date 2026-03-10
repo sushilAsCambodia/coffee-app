@@ -1,131 +1,74 @@
-import React, { useState, useCallback } from 'react';
+import React from 'react';
 import {
-  View, Text, TouchableOpacity, StyleSheet, FlatList, Image,
-  ActivityIndicator, Alert,
+  View, Text, TouchableOpacity, StyleSheet, FlatList, Image, Alert,
 } from 'react-native';
-import { useRouter, useFocusEffect } from 'expo-router';
+import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { api } from '../../src/services/api';
-import { Colors, Typography, BorderRadius, Shadows, Spacing } from '../../src/constants/theme';
+import { useCart } from '../../src/context/CartContext';
+import { Colors, Typography, BorderRadius, Shadows } from '../../src/constants/theme';
 
-const PRODUCT_IMAGES: Record<string, string> = {
-  latte: 'https://images.unsplash.com/photo-1561522983-385a76fbb4cb?w=200',
-  cappuccino: 'https://images.unsplash.com/photo-1572442388796-11668a67e53d?w=200',
-  americano: 'https://images.unsplash.com/photo-1514432324607-a09d9b4aefda?w=200',
-  mocha: 'https://images.unsplash.com/photo-1578314675249-a6910f80cc4e?w=200',
-  flatwhite: 'https://images.unsplash.com/photo-1577968897966-3d4325b36b61?w=200',
-  iced_latte: 'https://images.unsplash.com/photo-1695741996464-857c90c635c3?w=200',
-  cold_brew: 'https://images.unsplash.com/photo-1517701604599-bb29b565090c?w=200',
-  frappe: 'https://images.unsplash.com/photo-1461023058943-07fcbe16d735?w=200',
-  matcha: 'https://images.unsplash.com/photo-1515823064-d6e0c04616a7?w=200',
-  chai: 'https://images.unsplash.com/photo-1557006021-b85faa2bc5e2?w=200',
-  hotchoc: 'https://images.unsplash.com/photo-1542990253-0d0f5be5f0ed?w=200',
-  tiramisu: 'https://images.unsplash.com/photo-1571877227200-a0d98ea607e9?w=200',
-  croissant: 'https://images.unsplash.com/photo-1555507036-ab1f4038024a?w=200',
-  cheesecake: 'https://images.unsplash.com/photo-1524351199678-941a58a3df50?w=200',
-};
+const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1561522983-385a76fbb4cb?w=200';
 
 export default function CartScreen() {
   const router = useRouter();
-  const [cart, setCart] = useState<any>(null);
-  const [loading, setLoading] = useState(true);
-  const [updating, setUpdating] = useState<string | null>(null);
+  const { items, total, updateQuantity, removeItem, clearCart } = useCart();
 
-  const loadCart = useCallback(async () => {
-    try {
-      const data = await api.getCart();
-      setCart(data);
-    } catch (e) {
-      console.error(e);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useFocusEffect(useCallback(() => { loadCart(); }, []));
-
-  const updateQuantity = async (cartId: string, newQty: number) => {
-    if (newQty < 1) {
-      removeItem(cartId);
-      return;
-    }
-    setUpdating(cartId);
-    try {
-      await api.updateCartItem(cartId, newQty);
-      await loadCart();
-    } catch (e) {
-      Alert.alert('Error', 'Failed to update item');
-    } finally {
-      setUpdating(null);
-    }
+  const handleClearCart = () => {
+    Alert.alert('Clear Cart', 'Remove all items?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Clear', style: 'destructive', onPress: clearCart },
+    ]);
   };
 
-  const removeItem = async (cartId: string) => {
-    setUpdating(cartId);
-    try {
-      await api.deleteCartItem(cartId);
-      await loadCart();
-    } catch (e) {
-      Alert.alert('Error', 'Failed to remove item');
-    } finally {
-      setUpdating(null);
-    }
-  };
-
-  const renderCartItem = ({ item }: { item: any }) => {
-    const product = item.product || {};
-    const imgKey = product.image || 'latte';
-    return (
-      <View style={styles.cartItem}>
-        <Image source={{ uri: PRODUCT_IMAGES[imgKey] || PRODUCT_IMAGES.latte }} style={styles.itemImage} />
-        <View style={styles.itemInfo}>
-          <Text style={styles.itemName} numberOfLines={1}>{product.name || 'Item'}</Text>
-          <Text style={styles.itemDetails}>{item.size} · {item.sugar_level}</Text>
-          {item.add_ons?.length > 0 && <Text style={styles.itemAddons}>+ {item.add_ons.join(', ')}</Text>}
-          <Text style={styles.itemPrice}>${item.total_price?.toFixed(2)}</Text>
-        </View>
-        <View style={styles.qtyControl}>
-          <TouchableOpacity
-            testID={`cart-minus-${item.cart_id}`}
-            style={styles.qtyBtn}
-            onPress={() => updateQuantity(item.cart_id, item.quantity - 1)}
-            disabled={updating === item.cart_id}
-          >
-            <Ionicons name={item.quantity === 1 ? 'trash-outline' : 'remove'} size={16} color={item.quantity === 1 ? Colors.destructive : Colors.foreground} />
-          </TouchableOpacity>
-          <Text style={styles.qtyText}>{updating === item.cart_id ? '...' : item.quantity}</Text>
-          <TouchableOpacity
-            testID={`cart-plus-${item.cart_id}`}
-            style={styles.qtyBtn}
-            onPress={() => updateQuantity(item.cart_id, item.quantity + 1)}
-            disabled={updating === item.cart_id}
-          >
-            <Ionicons name="add" size={16} color={Colors.foreground} />
-          </TouchableOpacity>
-        </View>
+  const renderCartItem = ({ item }: { item: typeof items[0] }) => (
+    <View style={styles.cartItem}>
+      <Image
+        source={{ uri: item.product_image || FALLBACK_IMAGE }}
+        style={styles.itemImage}
+      />
+      <View style={styles.itemInfo}>
+        <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+        {item.variants?.length > 0 && (
+          <Text style={styles.itemDetails}>
+            {item.variants.map(v => v.option_name).join(' · ')}
+          </Text>
+        )}
+        {item.addons?.length > 0 && (
+          <Text style={styles.itemAddons}>+ {item.addons.map(a => a.name).join(', ')}</Text>
+        )}
+        <Text style={styles.itemPrice}>${item.total_price.toFixed(2)}</Text>
       </View>
-    );
-  };
-
-  if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <ActivityIndicator size="large" color={Colors.primary} style={{ marginTop: 100 }} />
-      </SafeAreaView>
-    );
-  }
-
-  const items = cart?.items || [];
-  const total = cart?.total || 0;
+      <View style={styles.qtyControl}>
+        <TouchableOpacity
+          testID={`cart-minus-${item.cart_id}`}
+          style={styles.qtyBtn}
+          onPress={() => updateQuantity(item.cart_id, item.quantity - 1)}
+        >
+          <Ionicons
+            name={item.quantity === 1 ? 'trash-outline' : 'remove'}
+            size={16}
+            color={item.quantity === 1 ? Colors.destructive : Colors.foreground}
+          />
+        </TouchableOpacity>
+        <Text style={styles.qtyText}>{item.quantity}</Text>
+        <TouchableOpacity
+          testID={`cart-plus-${item.cart_id}`}
+          style={styles.qtyBtn}
+          onPress={() => updateQuantity(item.cart_id, item.quantity + 1)}
+        >
+          <Ionicons name="add" size={16} color={Colors.foreground} />
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container} edges={['top']}>
-      {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>My Cart</Text>
         {items.length > 0 && (
-          <TouchableOpacity testID="clear-cart-btn" onPress={async () => { await api.clearCart(); loadCart(); }}>
+          <TouchableOpacity testID="clear-cart-btn" onPress={handleClearCart}>
             <Text style={styles.clearText}>Clear All</Text>
           </TouchableOpacity>
         )}
@@ -150,19 +93,14 @@ export default function CartScreen() {
             showsVerticalScrollIndicator={false}
           />
 
-          {/* Bottom Summary */}
           <View style={styles.summary}>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>Subtotal</Text>
               <Text style={styles.summaryValue}>${total.toFixed(2)}</Text>
             </View>
-            <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Delivery Fee</Text>
-              <Text style={styles.summaryValue}>$1.50</Text>
-            </View>
             <View style={styles.totalRow}>
               <Text style={styles.totalLabel}>Total</Text>
-              <Text style={styles.totalValue}>${(total + 1.5).toFixed(2)}</Text>
+              <Text style={styles.totalValue}>${total.toFixed(2)}</Text>
             </View>
             <TouchableOpacity
               testID="checkout-btn"
@@ -197,10 +135,7 @@ const styles = StyleSheet.create({
   itemAddons: { fontSize: Typography.xs, color: Colors.accent, marginTop: 2 },
   itemPrice: { fontSize: Typography.base, fontWeight: '700', color: Colors.primary, marginTop: 4 },
   qtyControl: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  qtyBtn: {
-    width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.muted,
-    alignItems: 'center', justifyContent: 'center',
-  },
+  qtyBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.muted, alignItems: 'center', justifyContent: 'center' },
   qtyText: { fontSize: Typography.base, fontWeight: '600', color: Colors.foreground, minWidth: 20, textAlign: 'center' },
   summary: {
     backgroundColor: Colors.card, borderTopLeftRadius: BorderRadius.xl, borderTopRightRadius: BorderRadius.xl,

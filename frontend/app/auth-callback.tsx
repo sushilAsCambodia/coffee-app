@@ -16,7 +16,7 @@ export default function AuthCallbackScreen() {
         // Extract token from URL params
         const token = params.token as string;
         if (token) {
-          await loginWithGoogle(token);
+          await loginWithGoogle?.(token);
           // Redirect to home after successful login
           router.replace('/(tabs)/home');
         } else {

@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { Colors, Typography, BorderRadius, Shadows } from '../../src/constants/theme';
 
-const LOGO_URL = 'https://customer-assets.emergentagent.com/job_caffeine-hub-15/artifacts/68ek0vii_image.png';
+const LOGO = require('../../assets/images/cafe-system-icon.png');
 
 export default function ProfileScreen() {
   const router = useRouter();
@@ -91,7 +91,7 @@ export default function ProfileScreen() {
 
         {/* App Info */}
         <View style={styles.appInfo}>
-          <Image source={{ uri: LOGO_URL }} style={styles.appLogo} />
+          <Image source={LOGO} style={styles.appLogo} resizeMode="contain" />
           <Text style={styles.appName}>Cafe Empire</Text>
           <Text style={styles.appVersion}>Version 1.0.0</Text>
         </View>
