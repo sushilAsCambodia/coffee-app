@@ -47,7 +47,7 @@ export default function DriverDashboard() {
           <Text style={s.greeting}>Driver Portal</Text>
           <Text style={s.name}>{user?.name || 'Driver'}</Text>
         </View>
-        <View style={[s.statusDot, { backgroundColor: user?.is_available !== false ? Colors.success : '#F59E0B' }]} />
+        <View style={[s.statusDot, { backgroundColor: Colors.success }]} />
       </View>
 
       {activeDelivery && (

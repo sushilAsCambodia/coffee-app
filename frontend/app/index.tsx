@@ -25,7 +25,7 @@ export default function AuthScreen() {
 
   useEffect(() => {
     if (!loading && user) {
-      router.replace('/(tabs)/home');
+      router.replace(user.role === 'driver' ? '/(driver)/dashboard' : '/(tabs)/home');
     }
   }, [user, loading]);
 

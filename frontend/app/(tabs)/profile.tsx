@@ -44,22 +44,12 @@ export default function ProfileScreen() {
         {/* User Card */}
         <View style={styles.userCard}>
           <View style={styles.avatarContainer}>
-            {user?.picture ? (
-              <Image source={{ uri: user.picture }} style={styles.avatar} />
-            ) : (
-              <View style={styles.avatarPlaceholder}>
-                <Text style={styles.avatarInitial}>{user?.name?.[0]?.toUpperCase() || 'U'}</Text>
-              </View>
-            )}
+            <View style={styles.avatarPlaceholder}>
+              <Text style={styles.avatarInitial}>{user?.name?.[0]?.toUpperCase() || 'U'}</Text>
+            </View>
           </View>
           <Text style={styles.userName}>{user?.name || 'User'}</Text>
           <Text style={styles.userEmail}>{user?.email || ''}</Text>
-          {user?.role === 'admin' && (
-            <View style={styles.adminBadge}>
-              <Ionicons name="shield-checkmark" size={14} color={Colors.primaryForeground} />
-              <Text style={styles.adminText}>Admin</Text>
-            </View>
-          )}
         </View>
 
         {/* Menu */}
@@ -109,7 +99,6 @@ const styles = StyleSheet.create({
     borderRadius: BorderRadius.xl, padding: 24, ...Shadows.medium,
   },
   avatarContainer: { marginBottom: 12 },
-  avatar: { width: 80, height: 80, borderRadius: 40 },
   avatarPlaceholder: {
     width: 80, height: 80, borderRadius: 40, backgroundColor: Colors.primary,
     alignItems: 'center', justifyContent: 'center',
@@ -117,11 +106,6 @@ const styles = StyleSheet.create({
   avatarInitial: { fontSize: Typography['3xl'], fontWeight: '700', color: Colors.primaryForeground },
   userName: { fontSize: Typography.xl, fontWeight: '700', color: Colors.foreground },
   userEmail: { fontSize: Typography.sm, color: Colors.mutedForeground, marginTop: 4 },
-  adminBadge: {
-    flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: Colors.primary,
-    paddingHorizontal: 12, paddingVertical: 6, borderRadius: BorderRadius.full, marginTop: 10,
-  },
-  adminText: { color: Colors.primaryForeground, fontSize: Typography.xs, fontWeight: '600' },
   menuCard: {
     backgroundColor: Colors.card, marginHorizontal: 20, marginTop: 24,
     borderRadius: BorderRadius.xl, ...Shadows.small, overflow: 'hidden',

@@ -1,6 +1,6 @@
-# Cafe Empire
+# Cafe Empire — Mobile App
 
-A full-stack coffee ordering mobile app built with **React Native (Expo)** and **FastAPI**. Supports customer ordering, admin management, and driver delivery workflows.
+A full-stack coffee ordering mobile app built with **React Native (Expo)** and **Laravel 12**. Supports customer ordering with real-time tracking, and driver delivery workflows.
 
 ---
 
@@ -8,56 +8,94 @@ A full-stack coffee ordering mobile app built with **React Native (Expo)** and *
 
 ```
 coffee-app/
-├── frontend/   # React Native app (Expo Router)
-└── backend/    # FastAPI server + MongoDB
+└── frontend/       # React Native app (Expo Router + TypeScript)
+
+Backend (separate repo):
+cafe-system-printer/  # Laravel 12 POS system — provides the API
 ```
 
 **Stack:**
-- Frontend: React Native, Expo 54, Expo Router, TypeScript
-- Backend: Python, FastAPI, MongoDB (Motor), JWT auth
-- Auth: Email/password + Google OAuth
-- Payments: ABA PayWay (mock)
+
+| Layer | Technology |
+|-------|-----------|
+| Mobile | React Native 0.81, Expo 54, Expo Router, TypeScript |
+| Backend | Laravel 12, PHP 8.4, MySQL |
+| Auth | Laravel Sanctum (Bearer token) — separate `coffee_app_users` table |
+| Maps | Leaflet.js in WebView (driver delivery screen) |
+| Payments | Cash / KHQR (static QR) — auto-processed on order creation |
 
 ---
 
-## Prerequisites
+## Project Structure
 
-- Node.js 18+ and npm/yarn
-- Python 3.10+
-- MongoDB instance (local or Atlas)
-- Expo Go app on your phone (for dev), or Android/iOS simulator
+```
+frontend/app/
+├── (tabs)/             # Customer flow
+│   ├── home.tsx        # Menu browsing by category
+│   ├── cart.tsx        # Cart with variants & add-ons
+│   ├── orders.tsx      # Order history
+│   └── profile.tsx     # Account & logout
+├── (driver)/           # Driver flow
+│   ├── dashboard.tsx   # Available orders list
+│   ├── delivery.tsx    # Active delivery + live map
+│   ├── history.tsx     # Completed deliveries
+│   └── profile.tsx     # Driver profile
+├── product/[id].tsx    # Product detail + add to cart
+├── tracking/[id].tsx   # Real-time order status tracking
+├── checkout.tsx        # Order summary + payment method
+└── index.tsx           # Login / register (routes by role)
+```
 
 ---
 
-## Backend Setup
+## User Roles
 
-### 1. Install dependencies
+Login with `email / password`. The app automatically routes based on the user's `role` field returned from the API.
 
-```bash
-cd backend
-python -m venv venv
-source venv/bin/activate        # Windows: venv\Scripts\activate
-pip install -r requirements.txt
+| Role | Credentials (demo) | Landing screen |
+|------|-------------------|----------------|
+| `customer` | `demo@coffeeapp.com` / `password` | Home menu |
+| `driver` | `sokha.driver@cafeempire.com` / `driver123` | Driver dashboard |
+
+New accounts registered through the app default to `customer` role. Driver accounts are created/promoted via the backend.
+
+---
+
+## API
+
+The mobile app talks to the Laravel backend at:
+
+```
+Base URL: {EXPO_PUBLIC_BACKEND_URL}/app-api/v1
 ```
 
-### 2. Configure environment
+Every request must include:
 
-Create a `.env` file in the `backend/` directory:
-
-```env
-MONGO_URL=mongodb://localhost:27017
-DB_NAME=cafe_empire
-JWT_SECRET=your-secret-key-here
+```
+X-Outlet-ID: 1          # which outlet/branch
+X-Locale: en            # language (en | km)
+Authorization: Bearer {token}   # for authenticated endpoints
 ```
 
-### 3. Run the server
+### Endpoints
 
-```bash
-uvicorn server:app --host 0.0.0.0 --port 8000 --reload
-```
-
-The API will be available at `http://localhost:8000`.
-Interactive docs: `http://localhost:8000/docs`
+| Method | Path | Auth | Description |
+|--------|------|------|-------------|
+| POST | `/auth/register` | — | Register new customer |
+| POST | `/auth/login` | — | Login (returns Bearer token + role) |
+| POST | `/auth/logout` | ✓ | Revoke token |
+| GET | `/auth/me` | ✓ | Current user profile |
+| GET | `/categories` | — | Menu categories |
+| GET | `/menus/{categoryId}` | — | Menu items with variants & add-ons |
+| POST | `/orders` | ✓ | Place order |
+| GET | `/orders` | ✓ | Customer's order history |
+| GET | `/orders/{id}` | ✓ | Single order (used for tracking) |
+| GET | `/driver/available-orders` | ✓ | Ready orders for pickup |
+| GET | `/driver/active-delivery` | ✓ | Driver's current delivery |
+| POST | `/driver/orders/{id}/accept` | ✓ | Accept an order |
+| POST | `/driver/location` | ✓ | Update driver GPS `{lat, lng}` |
+| POST | `/driver/orders/{id}/complete` | ✓ | Mark delivered |
+| GET | `/driver/history` | ✓ | Driver's completed deliveries |
 
 ---
 
@@ -68,144 +106,85 @@ Interactive docs: `http://localhost:8000/docs`
 ```bash
 cd frontend
 npm install
-# or
-yarn install
 ```
 
 ### 2. Configure environment
 
-Create a `.env` file in the `frontend/` directory:
+Create `frontend/.env`:
 
 ```env
-EXPO_PUBLIC_BACKEND_URL=http://localhost:8000
+EXPO_PUBLIC_BACKEND_URL=http://127.0.0.1:8000
+EXPO_PUBLIC_OUTLET_ID=1
 ```
 
-> **Note:** When testing on a physical device, replace `localhost` with your machine's local IP address (e.g., `http://192.168.1.100:8000`).
+> On a physical device, replace `127.0.0.1` with your machine's local IP (e.g., `192.168.1.100`).
 
 ### 3. Run the app
 
 ```bash
-# Start Expo dev server
-npm start
-# or
-yarn start
+cd frontend
+npx expo start
 ```
 
-Then:
-- Press `i` to open in iOS simulator
-- Press `a` to open in Android emulator
-- Scan the QR code with **Expo Go** on your phone
+- Press `i` → iOS simulator
+- Press `a` → Android emulator
+- Scan QR code → Expo Go on device
 
 ---
 
-## User Roles
+## Backend Setup (cafe-system-printer)
 
-| Role | Access |
-|------|--------|
-| `customer` | Browse menu, cart, orders, order tracking |
-| `admin` | Dashboard, manage products, manage orders, manage drivers |
-| `driver` | Delivery dashboard, active delivery, history |
+The API is part of the `cafe-system-printer` Laravel project.
 
----
-
-## Deployment
-
-### Backend — Deploy to a VPS / Cloud VM
-
-1. SSH into your server and clone the repo.
-2. Install dependencies (see Backend Setup above).
-3. Set environment variables in `.env`.
-4. Run with a process manager:
+### 1. Start the Laravel server
 
 ```bash
-# Using uvicorn directly (simple)
-uvicorn server:app --host 0.0.0.0 --port 8000
-
-# Or using gunicorn for production
-pip install gunicorn
-gunicorn server:app -w 4 -k uvicorn.workers.UvicornWorker --bind 0.0.0.0:8000
+cd /path/to/cafe-system-printer
+php artisan serve --host=0.0.0.0 --port=8000
 ```
 
-5. (Recommended) Use **nginx** as a reverse proxy with SSL.
+### 2. Run migrations
 
-### Backend — Deploy to Railway / Render / Fly.io
-
-These platforms auto-detect Python apps. Add environment variables in the platform dashboard and set the start command to:
-
-```
-uvicorn server:app --host 0.0.0.0 --port $PORT
+```bash
+php artisan migrate
 ```
 
-### Frontend — Build for Production
+### 3. Create a driver account
 
-#### Android APK / AAB
+Register via the API then update the role in the database, or use tinker:
+
+```bash
+php artisan tinker
+> App\CoffeeApp\Models\CoffeeAppUser::where('email','driver@example.com')->update(['role'=>'driver']);
+```
+
+---
+
+## Build for Production
+
+### Android APK / AAB
 
 ```bash
 cd frontend
-npx expo build:android
-# or with EAS Build (recommended)
 npx eas build --platform android
 ```
 
-#### iOS IPA
+### iOS IPA
 
 ```bash
 npx eas build --platform ios
 ```
 
-> EAS Build requires an [Expo account](https://expo.dev) and for iOS, an Apple Developer account.
-
-#### Web
+### Web
 
 ```bash
 npx expo export --platform web
 ```
 
-This outputs a static site to `dist/` that can be hosted on Netlify, Vercel, or any static host.
+> EAS Build requires an [Expo account](https://expo.dev). iOS requires an Apple Developer account.
 
-### Update `EXPO_PUBLIC_BACKEND_URL` for production
-
-Before building, update `frontend/.env` to point to your production backend URL:
+Before building, update `frontend/.env` with the production API URL:
 
 ```env
 EXPO_PUBLIC_BACKEND_URL=https://api.yourapp.com
-```
-
----
-
-## Running Tests
-
-### Backend
-
-```bash
-cd backend
-pytest tests/
-```
-
-### Frontend (lint)
-
-```bash
-cd frontend
-npm run lint
-```
-
----
-
-## Project Structure
-
-```
-frontend/app/
-├── (tabs)/         # Customer: home, cart, orders, profile
-├── (admin)/        # Admin: dashboard, products, orders, drivers
-├── (driver)/       # Driver: dashboard, delivery, history, profile
-├── product/        # Product detail screen
-├── tracking/       # Order tracking screen
-├── checkout.tsx
-├── register.tsx
-└── index.tsx       # Entry / splash
-
-backend/
-├── server.py       # All API routes and business logic
-├── requirements.txt
-└── .env            # Not committed — create locally
 ```

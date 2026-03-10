@@ -197,60 +197,6 @@ export const api = {
     return unwrap<any[]>(res);
   },
 
-  // ── Admin: Drivers ─────────────────────────────────────────────────────────
-  getDrivers: async (): Promise<any[]> => {
-    const res = await request('/admin/drivers');
-    return unwrap<any[]>(res);
-  },
-
-  createDriver: async (data: any): Promise<any> => {
-    const res = await request('/admin/drivers', { method: 'POST', body: JSON.stringify(data) });
-    return unwrap<any>(res);
-  },
-
-  deleteDriver: async (id: string): Promise<void> => {
-    await request(`/admin/drivers/${id}`, { method: 'DELETE' });
-  },
-
-  // ── Admin: Dashboard & Orders ──────────────────────────────────────────────
-  getAdminDashboard: async (): Promise<any> => {
-    const res = await request('/admin/dashboard');
-    return unwrap<any>(res);
-  },
-
-  getAdminOrders: async (status?: string): Promise<any[]> => {
-    const path = status ? `/admin/orders?status=${status}` : '/admin/orders';
-    const res = await request(path);
-    return unwrap<any[]>(res);
-  },
-
-  updateOrderStatus: async (orderId: string, status: string): Promise<void> => {
-    await request(`/admin/orders/${orderId}/status`, {
-      method: 'PATCH',
-      body: JSON.stringify({ status }),
-    });
-  },
-
-  // ── Admin: Products ────────────────────────────────────────────────────────
-  getProducts: async (): Promise<any[]> => {
-    const res = await request('/admin/products');
-    return unwrap<any[]>(res);
-  },
-
-  createProduct: async (data: any): Promise<any> => {
-    const res = await request('/admin/products', { method: 'POST', body: JSON.stringify(data) });
-    return unwrap<any>(res);
-  },
-
-  updateProduct: async (id: string, data: any): Promise<any> => {
-    const res = await request(`/admin/products/${id}`, { method: 'PUT', body: JSON.stringify(data) });
-    return unwrap<any>(res);
-  },
-
-  deleteProduct: async (id: string): Promise<void> => {
-    await request(`/admin/products/${id}`, { method: 'DELETE' });
-  },
-
   // ── Locale ────────────────────────────────────────────────────────────────
   setLocale,
   setOutletId,
@@ -263,12 +209,10 @@ export interface AuthUser {
   name: string;
   email: string;
   phone: string | null;
-  // Driver / admin optional fields
-  is_available?: boolean;
+  role?: 'customer' | 'driver';
+  // Driver profile fields
   vehicle?: string;
   plate?: string;
-  role?: string;
-  picture?: string | null;
 }
 
 export interface Category {
