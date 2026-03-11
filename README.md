@@ -113,7 +113,11 @@ npm install
 
 ### 2. Configure environment
 
-Create `.env` in the project root:
+```bash
+cp .env.example .env
+```
+
+Then edit `.env`:
 
 ```env
 EXPO_PUBLIC_BACKEND_URL=http://127.0.0.1:8000
@@ -175,6 +179,7 @@ Update `.env` with the production API URL before building:
 
 ```env
 EXPO_PUBLIC_BACKEND_URL=https://api.yourapp.com
+EXPO_PUBLIC_OUTLET_ID=1
 ```
 
 > EAS Build requires an [Expo account](https://expo.dev). iOS requires an Apple Developer account.
