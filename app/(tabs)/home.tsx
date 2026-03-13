@@ -14,7 +14,7 @@ import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../src/co
 
 const { width } = Dimensions.get('window');
 const CARD_WIDTH = (width - 60) / 2;
-const LOGO = require('../../assets/images/cafe-system-icon.png');
+const LOGO = require('../../assets/images/cafe-system-logo.png');
 const FALLBACK_IMAGE = 'https://images.unsplash.com/photo-1561522983-385a76fbb4cb?w=400';
 
 export default function HomeScreen() {

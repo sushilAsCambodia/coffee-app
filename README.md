@@ -7,8 +7,8 @@ A full-stack coffee ordering mobile app built with **React Native (Expo)** and *
 ## Architecture
 
 ```
-coffee-app/          # React Native app (this repo)
-cafe-system-printer/ # Laravel 12 backend (separate repo)
+cafe-empire/     # React Native app (this repo)
+cafe-system/     # Laravel 12 backend (separate repo)
 ```
 
 **Stack:**
@@ -26,7 +26,7 @@ cafe-system-printer/ # Laravel 12 backend (separate repo)
 ## Project Structure
 
 ```
-coffee-app/
+.
 ├── app/
 │   ├── (tabs)/             # Customer flow
 │   │   ├── home.tsx        # Menu browsing by category
@@ -60,12 +60,17 @@ coffee-app/
 
 Login with `email / password`. The app routes automatically based on the `role` returned by the API.
 
-| Role | Demo credentials | Landing screen |
-|------|-----------------|----------------|
-| `customer` | `demo@coffeeapp.com` / `password` | Home (menu) |
-| `driver` | `sokha.driver@cafeempire.com` / `driver123` | Driver dashboard |
+| Role | Landing screen |
+|------|----------------|
+| `customer` | Home (menu) |
+| `driver` | Driver dashboard |
 
-New accounts registered in the app default to `customer`. Driver accounts are promoted via the database or Laravel tinker.
+New accounts registered in the app default to `customer`. Driver accounts are promoted via the database or Laravel tinker:
+
+```bash
+php artisan tinker
+> App\CoffeeApp\Models\CoffeeAppUser::where('email','someone@example.com')->update(['role'=>'driver']);
+```
 
 ---
 
@@ -138,12 +143,12 @@ npx expo start
 
 ---
 
-## Backend (cafe-system-printer)
+## Backend (cafe-system)
 
 ### Start the server
 
 ```bash
-cd /path/to/cafe-system-printer
+cd /path/to/cafe-system
 php artisan serve --host=0.0.0.0 --port=8000
 ```
 
@@ -151,13 +156,6 @@ php artisan serve --host=0.0.0.0 --port=8000
 
 ```bash
 php artisan migrate
-```
-
-### Promote a user to driver
-
-```bash
-php artisan tinker
-> App\CoffeeApp\Models\CoffeeAppUser::where('email','someone@example.com')->update(['role'=>'driver']);
 ```
 
 ---

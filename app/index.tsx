@@ -9,7 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../src/context/AuthContext';
 import { Colors, Typography, BorderRadius, Shadows } from '../src/constants/theme';
 
-const LOGO = require('../assets/images/cafe-system-icon.png');
+const LOGO = require('../assets/images/cafe-system-logo.png');
 
 export default function AuthScreen() {
   const router = useRouter();
@@ -84,7 +84,7 @@ export default function AuthScreen() {
               {mode === 'login' ? 'Welcome Back' : 'Create Account'}
             </Text>
             <Text style={styles.formSubtitle}>
-              {mode === 'login' ? 'Sign in to continue' : 'Join Khmer Empire Coffee'}
+              {mode === 'login' ? 'Sign in to continue' : 'Join Cafe Empire'}
             </Text>
 
             {error ? (
@@ -174,15 +174,6 @@ export default function AuthScreen() {
               </Text>
             </TouchableOpacity>
 
-            {mode === 'login' && (
-              <View style={styles.demoBox}>
-                <Ionicons name="information-circle-outline" size={14} color={Colors.mutedForeground} />
-                <View>
-                  <Text style={styles.demoLabel}>Demo account:</Text>
-                  <Text style={styles.demoText}>demo@coffeeapp.com  /  password</Text>
-                </View>
-              </View>
-            )}
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
@@ -222,10 +213,4 @@ const styles = StyleSheet.create({
   switchBtn: { marginTop: 20, alignItems: 'center' },
   switchText: { fontSize: Typography.sm, color: Colors.mutedForeground },
   switchLink: { color: Colors.primary, fontWeight: '600' },
-  demoBox: {
-    flexDirection: 'row', gap: 8, alignItems: 'flex-start',
-    marginTop: 20, backgroundColor: Colors.muted, padding: 12, borderRadius: BorderRadius.md,
-  },
-  demoLabel: { color: Colors.mutedForeground, fontSize: Typography.xs, fontWeight: '600', marginBottom: 4 },
-  demoText: { color: Colors.mutedForeground, fontSize: Typography.xs },
 });

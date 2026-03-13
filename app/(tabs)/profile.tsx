@@ -8,7 +8,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { Colors, Typography, BorderRadius, Shadows } from '../../src/constants/theme';
 
-const LOGO = require('../../assets/images/cafe-system-icon.png');
+const LOGO = require('../../assets/images/cafe-system-logo.png');
 
 export default function ProfileScreen() {
   const router = useRouter();
