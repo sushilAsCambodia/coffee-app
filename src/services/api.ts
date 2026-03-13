@@ -162,6 +162,11 @@ export const api = {
     return unwrap<Order>(res);
   },
 
+  cancelOrder: async (id: number): Promise<Order> => {
+    const res = await request(`/orders/${id}/cancel`, { method: 'POST' });
+    return unwrap<Order>(res);
+  },
+
   // ── Driver ────────────────────────────────────────────────────────────────
   getAvailableOrders: async (): Promise<any[]> => {
     const res = await request('/driver/available-orders');
@@ -197,12 +202,83 @@ export const api = {
     return unwrap<any[]>(res);
   },
 
+  // ── Profile ───────────────────────────────────────────────────────────────
+  updateProfile: async (data: {
+    name?: string;
+    phone?: string;
+    email?: string;
+    current_password?: string;
+    new_password?: string;
+    new_password_confirmation?: string;
+  }): Promise<AuthUser> => {
+    const res = await request('/auth/profile', {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return unwrap<AuthUser>(res);
+  },
+
+  // ── Addresses ─────────────────────────────────────────────────────────────
+  getAddresses: async (): Promise<Address[]> => {
+    const res = await request('/addresses');
+    return unwrap<Address[]>(res);
+  },
+
+  createAddress: async (data: Omit<Address, 'id'>): Promise<Address> => {
+    const res = await request('/addresses', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+    return unwrap<Address>(res);
+  },
+
+  updateAddress: async (id: number, data: Partial<Omit<Address, 'id'>>): Promise<Address> => {
+    const res = await request(`/addresses/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+    return unwrap<Address>(res);
+  },
+
+  deleteAddress: async (id: number): Promise<void> => {
+    await request(`/addresses/${id}`, { method: 'DELETE' });
+  },
+
+  setDefaultAddress: async (id: number): Promise<Address> => {
+    const res = await request(`/addresses/${id}/default`, { method: 'POST' });
+    return unwrap<Address>(res);
+  },
+
+  // ── Outlets ───────────────────────────────────────────────────────────────
+  getOutlets: async (): Promise<Outlet[]> => {
+    const res = await fetch(`${APP_API}/outlets`, {
+      headers: { Accept: 'application/json', 'X-Locale': _locale },
+    });
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const body = await res.json();
+    return unwrap<Outlet[]>(body);
+  },
+
   // ── Locale ────────────────────────────────────────────────────────────────
   setLocale,
   setOutletId,
 };
 
 // ─── Types ────────────────────────────────────────────────────────────────────
+export interface Outlet {
+  id: number;
+  name: string;
+  location: string;
+}
+
+export interface Address {
+  id: number;
+  label: string;
+  address: string;
+  city: string | null;
+  is_default: boolean;
+}
+
 export interface AuthUser {
   id: number;
   outlet_id: number;
@@ -285,13 +361,18 @@ export interface OrderItem {
   addons?: any[];
 }
 
+export type ServiceMode = 'takeaway' | 'dine_in' | 'delivery';
+
 export interface CreateOrderPayload {
   items: OrderItem[];
-  service_mode: 'takeaway' | 'dine_in';
+  service_mode: ServiceMode;
   payment_method: string;
   customer_name?: string;
   customer_phone?: string;
   order_notes?: string;
+  delivery_address?: string;
+  delivery_lat?: number;
+  delivery_lng?: number;
 }
 
 export interface Order {
@@ -299,7 +380,7 @@ export interface Order {
   order_number: string;
   daily_token: string;
   status: OrderStatus;
-  service_mode: string;
+  service_mode: ServiceMode;
   items: OrderItem[];
   subtotal: number;
   tax: number;
@@ -310,6 +391,9 @@ export interface Order {
   customer_name: string | null;
   customer_phone: string | null;
   order_notes: string | null;
+  delivery_address: string | null;
+  delivery_lat: number | null;
+  delivery_lng: number | null;
   created_at: string;
   updated_at: string;
 }

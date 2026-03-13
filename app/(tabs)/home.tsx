@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, FlatList, TextInput,
-  ScrollView, ActivityIndicator, RefreshControl, Image, Dimensions,
+  ScrollView, ActivityIndicator, RefreshControl, Image, Dimensions, Modal,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../src/context/AuthContext';
 import { useCart } from '../../src/context/CartContext';
+import { useOutlet } from '../../src/context/OutletContext';
 import { api, Category, Menu } from '../../src/services/api';
 import { setProductCache } from '../../src/utils/productCache';
 import { Colors, Typography, Spacing, BorderRadius, Shadows } from '../../src/constants/theme';
@@ -21,6 +22,8 @@ export default function HomeScreen() {
   const router = useRouter();
   const { user } = useAuth();
   const { count } = useCart();
+  const { outlets, selectedOutlet, selectOutlet } = useOutlet();
+  const [shopPickerVisible, setShopPickerVisible] = useState(false);
   const [categories, setCategories] = useState<Category[]>([]);
   const [allProducts, setAllProducts] = useState<Menu[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<number | null>(null);
@@ -50,7 +53,7 @@ export default function HomeScreen() {
     }
   }, []);
 
-  useEffect(() => { loadData(); }, []);
+  useEffect(() => { loadData(); }, [selectedOutlet?.id]);
 
   const filteredProducts = allProducts.filter(p => {
     if (selectedCategory !== null && p.category_id !== selectedCategory) return false;
@@ -151,6 +154,86 @@ export default function HomeScreen() {
             )}
           </TouchableOpacity>
         </View>
+
+        {/* Shop Selector — customers only */}
+        {user?.role !== 'driver' && outlets.length > 1 && (
+          <TouchableOpacity
+            style={styles.shopSelector}
+            onPress={() => setShopPickerVisible(true)}
+            activeOpacity={0.75}
+          >
+            <View style={styles.shopSelectorLeft}>
+              <View style={styles.shopIconBox}>
+                <Ionicons name="storefront-outline" size={16} color={Colors.primary} />
+              </View>
+              <View>
+                <Text style={styles.shopSelectorLabel}>Current Shop</Text>
+                <Text style={styles.shopSelectorName} numberOfLines={1}>
+                  {selectedOutlet?.name || 'Select a shop'}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.shopSelectorRight}>
+              {selectedOutlet?.location ? (
+                <Text style={styles.shopSelectorLocation} numberOfLines={1}>
+                  {selectedOutlet.location}
+                </Text>
+              ) : null}
+              <Ionicons name="chevron-down" size={16} color={Colors.primary} />
+            </View>
+          </TouchableOpacity>
+        )}
+
+        {/* Shop Picker Modal */}
+        <Modal
+          visible={shopPickerVisible}
+          transparent
+          animationType="slide"
+          onRequestClose={() => setShopPickerVisible(false)}
+        >
+          <TouchableOpacity
+            style={styles.modalOverlay}
+            activeOpacity={1}
+            onPress={() => setShopPickerVisible(false)}
+          >
+            <View style={styles.modalSheet} onStartShouldSetResponder={() => true}>
+              <View style={styles.modalHandle} />
+              <Text style={styles.modalTitle}>Select a Shop</Text>
+              <Text style={styles.modalSubtitle}>Menu and orders will update for the chosen location</Text>
+              {outlets.map(outlet => {
+                const isSelected = selectedOutlet?.id === outlet.id;
+                return (
+                  <TouchableOpacity
+                    key={outlet.id}
+                    style={[styles.outletCard, isSelected && styles.outletCardSelected]}
+                    onPress={async () => {
+                      await selectOutlet(outlet);
+                      setShopPickerVisible(false);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.outletCardLeft}>
+                      <View style={[styles.outletIconBox, isSelected && styles.outletIconBoxSelected]}>
+                        <Ionicons name="storefront" size={20} color={isSelected ? Colors.primaryForeground : Colors.primary} />
+                      </View>
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.outletName, isSelected && styles.outletNameSelected]}>
+                          {outlet.name}
+                        </Text>
+                        {outlet.location ? (
+                          <Text style={styles.outletLocation} numberOfLines={1}>{outlet.location}</Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    {isSelected && (
+                      <Ionicons name="checkmark-circle" size={22} color={Colors.primary} />
+                    )}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          </TouchableOpacity>
+        </Modal>
 
         {/* Search */}
         <View style={styles.searchContainer}>
@@ -304,4 +387,53 @@ const styles = StyleSheet.create({
   addBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: Colors.primary, alignItems: 'center', justifyContent: 'center' },
   emptyState: { alignItems: 'center', paddingVertical: 40, gap: 12 },
   emptyText: { color: Colors.mutedForeground, fontSize: Typography.base },
+
+  // Shop selector bar
+  shopSelector: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    marginHorizontal: 20, marginBottom: 12,
+    backgroundColor: Colors.card, borderRadius: BorderRadius.lg,
+    paddingHorizontal: 14, paddingVertical: 10,
+    borderWidth: 1, borderColor: Colors.border, ...Shadows.small,
+  },
+  shopSelectorLeft: { flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1 },
+  shopIconBox: {
+    width: 32, height: 32, borderRadius: 8,
+    backgroundColor: Colors.secondary,
+    alignItems: 'center', justifyContent: 'center',
+  },
+  shopSelectorLabel: { fontSize: Typography.xs, color: Colors.mutedForeground },
+  shopSelectorName: { fontSize: Typography.sm, fontWeight: '600', color: Colors.foreground, maxWidth: 160 },
+  shopSelectorRight: { flexDirection: 'row', alignItems: 'center', gap: 6 },
+  shopSelectorLocation: { fontSize: Typography.xs, color: Colors.mutedForeground, maxWidth: 100 },
+
+  // Modal sheet
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+  modalSheet: {
+    backgroundColor: Colors.card, borderTopLeftRadius: 24, borderTopRightRadius: 24,
+    paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36,
+  },
+  modalHandle: {
+    width: 40, height: 4, borderRadius: 2, backgroundColor: Colors.border,
+    alignSelf: 'center', marginBottom: 20,
+  },
+  modalTitle: { fontSize: Typography['2xl'], fontWeight: '700', color: Colors.foreground, marginBottom: 4 },
+  modalSubtitle: { fontSize: Typography.sm, color: Colors.mutedForeground, marginBottom: 20 },
+
+  // Outlet cards inside modal
+  outletCard: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
+    padding: 14, borderRadius: BorderRadius.lg, marginBottom: 10,
+    backgroundColor: Colors.background, borderWidth: 1.5, borderColor: Colors.border,
+  },
+  outletCardSelected: { borderColor: Colors.primary, backgroundColor: Colors.secondary },
+  outletCardLeft: { flexDirection: 'row', alignItems: 'center', gap: 12, flex: 1 },
+  outletIconBox: {
+    width: 40, height: 40, borderRadius: 10,
+    backgroundColor: Colors.secondary, alignItems: 'center', justifyContent: 'center',
+  },
+  outletIconBoxSelected: { backgroundColor: Colors.primary },
+  outletName: { fontSize: Typography.base, fontWeight: '600', color: Colors.foreground },
+  outletNameSelected: { color: Colors.primary },
+  outletLocation: { fontSize: Typography.xs, color: Colors.mutedForeground, marginTop: 2 },
 });

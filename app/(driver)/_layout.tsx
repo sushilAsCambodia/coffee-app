@@ -1,10 +1,15 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors } from '../../src/constants/theme';
 import { StyleSheet } from 'react-native';
+import { useAuth } from '../../src/context/AuthContext';
 
 export default function DriverLayout() {
+  const { user, loading } = useAuth();
+
+  if (!loading && !user) return <Redirect href="/" />;
+
   return (
     <Tabs screenOptions={{ headerShown: false, tabBarActiveTintColor: '#3B82F6', tabBarInactiveTintColor: Colors.mutedForeground, tabBarStyle: styles.tabBar, tabBarLabelStyle: styles.tabLabel }}>
       <Tabs.Screen name="dashboard" options={{ title: 'Orders', tabBarIcon: ({ color, size }) => <Ionicons name="list" size={size} color={color} /> }} />

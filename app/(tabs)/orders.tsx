@@ -72,19 +72,29 @@ export default function OrdersScreen() {
           <Text style={styles.orderTotal}>${Number(item.total).toFixed(2)}</Text>
         </View>
 
-        {item.service_mode && (
-          <View style={styles.metaRow}>
-            <Ionicons
-              name={item.service_mode === 'dining' ? 'restaurant-outline' : 'bag-outline'}
-              size={14}
-              color={Colors.mutedForeground}
-            />
-            <Text style={styles.metaText}>
-              {item.service_mode === 'dining' ? 'Dine In' : 'Takeaway'}
-            </Text>
-            <View style={styles.dot} />
-            <Ionicons name="card-outline" size={14} color={Colors.mutedForeground} />
-            <Text style={styles.metaText}>{item.payment_method.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</Text>
+        <View style={styles.metaRow}>
+          <Ionicons
+            name={
+              item.service_mode === 'dine_in'  ? 'restaurant-outline' :
+              item.service_mode === 'delivery' ? 'bicycle-outline'     : 'bag-handle-outline'
+            }
+            size={14}
+            color={Colors.mutedForeground}
+          />
+          <Text style={styles.metaText}>
+            {item.service_mode === 'dine_in'  ? 'Dine In'  :
+             item.service_mode === 'delivery' ? 'Delivery' : 'Takeaway'}
+          </Text>
+          <View style={styles.dot} />
+          <Ionicons name="card-outline" size={14} color={Colors.mutedForeground} />
+          <Text style={styles.metaText}>{item.payment_method.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}</Text>
+        </View>
+
+        {/* Delivery address chip */}
+        {item.service_mode === 'delivery' && item.delivery_address && (
+          <View style={styles.deliveryRow}>
+            <Ionicons name="location-outline" size={13} color={Colors.primary} />
+            <Text style={styles.deliveryText} numberOfLines={1}>{item.delivery_address}</Text>
           </View>
         )}
 
@@ -177,6 +187,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10, paddingVertical: 6, borderRadius: BorderRadius.md, alignSelf: 'flex-start',
   },
   activeText: { fontSize: Typography.xs, fontWeight: '600' },
+  deliveryRow: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 6 },
+  deliveryText: { fontSize: Typography.xs, color: Colors.primary, flex: 1 },
   emptyState: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40, gap: 12 },
   emptyTitle: { fontSize: Typography.xl, fontWeight: '700', color: Colors.foreground },
   emptySubtitle: { fontSize: Typography.sm, color: Colors.mutedForeground, textAlign: 'center' },

@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View, Text, TouchableOpacity, StyleSheet, Dimensions, Animated,
-  ActivityIndicator, ScrollView,
+  ActivityIndicator, ScrollView, Alert,
 } from 'react-native';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
@@ -53,9 +53,10 @@ export default function OrderTrackingScreen() {
   const insets    = useSafeAreaInsets();
   const { id }    = useLocalSearchParams<{ id: string }>();
 
-  const [order,   setOrder]   = useState<Order | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [expanded, setExpanded] = useState(false);
+  const [order,     setOrder]     = useState<Order | null>(null);
+  const [loading,   setLoading]   = useState(true);
+  const [expanded,  setExpanded]  = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const sheetHeight = useRef(new Animated.Value(SHEET_MIN)).current;
   const pulseAnim   = useRef(new Animated.Value(1)).current;
@@ -93,6 +94,31 @@ export default function OrderTrackingScreen() {
     const iv = setInterval(loadOrder, 6000);
     return () => clearInterval(iv);
   }, [loadOrder]);
+
+  const handleCancel = () => {
+    Alert.alert(
+      'Cancel Order',
+      'Are you sure you want to cancel this order?',
+      [
+        { text: 'No', style: 'cancel' },
+        {
+          text: 'Yes, Cancel',
+          style: 'destructive',
+          onPress: async () => {
+            setCancelling(true);
+            try {
+              const updated = await api.cancelOrder(parseInt(id!, 10));
+              setOrder(updated);
+            } catch (err: any) {
+              Alert.alert('Cannot Cancel', err.message || 'This order can no longer be cancelled.');
+            } finally {
+              setCancelling(false);
+            }
+          },
+        },
+      ]
+    );
+  };
 
   const toggleSheet = () => {
     const toValue = expanded ? SHEET_MIN : SHEET_MAX;
@@ -220,6 +246,19 @@ export default function OrderTrackingScreen() {
             </View>
           )}
 
+          {/* Delivery Address (for delivery orders) */}
+          {order.delivery_address && (
+            <View style={styles.deliveryAddrRow}>
+              <View style={styles.deliveryAddrIcon}>
+                <Ionicons name="location" size={18} color={Colors.primary} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.deliveryAddrLabel}>Delivery Address</Text>
+                <Text style={styles.deliveryAddrValue}>{order.delivery_address}</Text>
+              </View>
+            </View>
+          )}
+
           {/* Items */}
           <Text style={styles.sectionTitle}>Order Items</Text>
           {(order.items ?? []).map((item, i) => (
@@ -288,6 +327,21 @@ export default function OrderTrackingScreen() {
             >
               <Ionicons name="refresh" size={20} color="#fff" />
               <Text style={styles.reorderText}>Order Again</Text>
+            </TouchableOpacity>
+          )}
+
+          {/* Cancel button — only for pending/preparing orders */}
+          {(order.status === 'pending' || order.status === 'preparing') && (
+            <TouchableOpacity
+              style={styles.cancelBtn}
+              onPress={handleCancel}
+              disabled={cancelling}
+              activeOpacity={0.8}
+            >
+              {cancelling
+                ? <ActivityIndicator size="small" color={Colors.destructive} />
+                : <Ionicons name="close-circle-outline" size={18} color={Colors.destructive} />}
+              <Text style={styles.cancelBtnText}>Cancel Order</Text>
             </TouchableOpacity>
           )}
 
@@ -361,4 +415,12 @@ const styles = StyleSheet.create({
   reorderText:  { fontSize: Typography.base, fontWeight: '700', color: Colors.primaryForeground },
   ordersLink:   { alignItems: 'center', paddingVertical: 12 },
   ordersLinkText: { fontSize: Typography.sm, color: Colors.primary, fontWeight: '500' },
+
+  deliveryAddrRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 10, backgroundColor: Colors.secondary, borderRadius: BorderRadius.lg, padding: 12, marginBottom: 16 },
+  deliveryAddrIcon: { width: 32, height: 32, borderRadius: 10, backgroundColor: Colors.card, alignItems: 'center', justifyContent: 'center', ...Shadows.small },
+  deliveryAddrLabel: { fontSize: Typography.xs, fontWeight: '700', color: Colors.primary, textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 3 },
+  deliveryAddrValue: { fontSize: Typography.sm, color: Colors.foreground, lineHeight: 18 },
+
+  cancelBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, borderWidth: 1, borderColor: Colors.destructive, borderRadius: BorderRadius.full, paddingVertical: 13, marginBottom: 12 },
+  cancelBtnText: { fontSize: Typography.sm, fontWeight: '700', color: Colors.destructive },
 });

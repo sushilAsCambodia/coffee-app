@@ -1,10 +1,15 @@
 import React from 'react';
-import { Tabs } from 'expo-router';
+import { Tabs, Redirect } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { Colors, Typography } from '../../src/constants/theme';
 import { View, StyleSheet } from 'react-native';
+import { useAuth } from '../../src/context/AuthContext';
 
 export default function TabLayout() {
+  const { user, loading } = useAuth();
+
+  if (!loading && !user) return <Redirect href="/" />;
+
   return (
     <Tabs
       screenOptions={{
