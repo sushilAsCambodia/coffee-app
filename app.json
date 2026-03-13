@@ -16,6 +16,7 @@
       }
     },
     "android": {
+      "package": "com.khmerempire.cafeempire",
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/cafe-system-logo.png",
         "backgroundColor": "#000"

@@ -49,8 +49,9 @@ cafe-system/     # Laravel 12 backend (separate repo)
 │   ├── context/            # AuthContext, CartContext
 │   ├── services/           # api.ts — all backend calls
 │   └── utils/              # Helper utilities
-├── assets/                 # Images, icons, fonts
-├── app.json                # Expo config
+├── assets/images/          # App logo and icons
+├── app.json                # Expo config (bundle IDs, EAS project)
+├── eas.json                # EAS Build profiles
 └── .env                    # Environment variables (not committed)
 ```
 
@@ -160,18 +161,37 @@ php artisan migrate
 
 ---
 
-## Build for Production
+## EAS Build
+
+EAS project: `@khmer-empire/cafe-empire`
+Bundle ID (iOS): `com.khmerempire.cafeempire`
+Package (Android): `com.khmerempire.cafeempire`
+
+### Testing APK (Android)
 
 ```bash
-# Android
-npx eas build --platform android
-
-# iOS
-npx eas build --platform ios
-
-# Web
-npx expo export --platform web
+eas build --profile preview --platform android
 ```
+
+Produces a `.apk` you can install directly on any Android device — no Play Store needed.
+
+### Production builds
+
+```bash
+# Android (.aab for Play Store)
+eas build --profile production --platform android
+
+# iOS (.ipa for App Store)
+eas build --profile production --platform ios
+```
+
+### Simulator build (iOS)
+
+```bash
+npx expo run:ios
+```
+
+Builds a native dev client with your real splash screen and app icon.
 
 Update `.env` with the production API URL before building:
 
@@ -180,4 +200,4 @@ EXPO_PUBLIC_BACKEND_URL=https://api.yourapp.com
 EXPO_PUBLIC_OUTLET_ID=1
 ```
 
-> EAS Build requires an [Expo account](https://expo.dev). iOS requires an Apple Developer account.
+> EAS Build requires an [Expo account](https://expo.dev). iOS production builds require an Apple Developer account ($99/year).
